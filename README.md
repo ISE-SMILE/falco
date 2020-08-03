@@ -1,5 +1,7 @@
 # Falco - <ins>Fa</ins>as-based <ins>l</ins>arge-scale <ins>Co</ins>mputing 
 
+![Icon](/logo.svg | height=120)
+
 <!--TODO: Logo / possible rename? -->
 
 ## About
