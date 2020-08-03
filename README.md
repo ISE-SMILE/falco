@@ -1,4 +1,4 @@
-# Falco - _Fa_ as-based _l_ arge-scale _Co_mputing 
+# Falco - <ins>Fa</ins>as-based <ins>l</ins>arge-scale <ins>Co</ins>mputing 
 
 <!--TODO: Logo / possible rename? -->
 
