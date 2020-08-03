@@ -1,6 +1,7 @@
 # Falco - <ins>Fa</ins>as-based <ins>l</ins>arge-scale <ins>Co</ins>mputing 
-
-![Icon](/logo.svg | height=120)
+<p align="center">
+ <img src="https://raw.githubusercontent.com/ISE-SMILE/falco/master/logo.svg" height=170/>
+</p>
 
 <!--TODO: Logo / possible rename? -->
 
@@ -33,3 +34,4 @@ Distributed under the MIT License. See LICENSE for more information.
 
 ## Acknowledgements
 <!--TODO: -->
+ 
