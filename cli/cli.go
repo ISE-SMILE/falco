@@ -36,8 +36,7 @@ import (
 
 var CommitHash string
 
-func Run(runtime falco.Runtime) {
-
+func appFromRuntime(runtime falco.Runtime) *cli.App {
 	ctx := context.Background()
 
 	dockerRunner := platforms.NewOpenWhiskDockerRunner(ctx)
@@ -48,7 +47,6 @@ func Run(runtime falco.Runtime) {
 		panic(err)
 	}
 
-	start := time.Now()
 	cmds := make([]*cli.Command, 0)
 
 	cmds = DockerCommandSetup(cmds, dockerRunner, runtime)
@@ -62,21 +60,17 @@ func Run(runtime falco.Runtime) {
 		Commands:             cmds,
 		Before: func(c *cli.Context) error {
 			SetFlags(c)
-			//inject settings based on flags
-			targetHost := c.String("host")
-			if targetHost != "" {
-				whiksRunner.Apply(platforms.WithHost(targetHost))
-			}
-			authToken := c.String("auth")
-			if authToken != "" {
-				whiksRunner.Apply(platforms.WithAuthToken(authToken))
-			}
-
 			return nil
 		},
 	}
+	return app
+}
 
-	err = app.Run(os.Args)
+func Run(runtime falco.Runtime) {
+
+	app := appFromRuntime(runtime)
+	start := time.Now()
+	err := app.Run(os.Args)
 	if err != nil {
 		log.Fatal(err)
 	}

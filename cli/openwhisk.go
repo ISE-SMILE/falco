@@ -74,6 +74,19 @@ func OWCommandSetup(commands []*cli.Command, platfrom *platforms.OpenWhisk, runt
 	commands = append(commands, &cli.Command{
 		Name:    "ow",
 		Aliases: []string{"ow"},
+		Before: func(c *cli.Context) error {
+			//inject settings based on flags
+			targetHost := c.String("host")
+			if targetHost != "" {
+				platfrom.Apply(platforms.WithHost(targetHost))
+			}
+			authToken := c.String("auth")
+			if authToken != "" {
+				platfrom.Apply(platforms.WithAuthToken(authToken))
+			}
+
+			return nil
+		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     "host",
