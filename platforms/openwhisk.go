@@ -50,12 +50,20 @@ type OpenWhiskOption func(*OpenWhisk)
 func WithHost(host string) OpenWhiskOption {
 	return func(openWhisk *OpenWhisk) {
 		openWhisk.Host = host
+		err := openWhisk.connect()
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
 func WithAuthToken(token string) OpenWhiskOption {
 	return func(openWhisk *OpenWhisk) {
 		openWhisk.Token = token
+		err := openWhisk.connect()
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
