@@ -132,6 +132,8 @@ func OWCommandSetup(commands []*cli.Command, platfrom *platforms.OpenWhisk, runt
 
 					readCommonFlags(c, ctx)
 
+					ctx.NewStingOption("action", c.String("action"))
+
 					deployable, err := runtime.MakeDeployment(ctx, files...)
 					if err != nil {
 						return err
