@@ -36,46 +36,44 @@ import (
 
 var CommitHash string
 
-func Run(runtime falco.Runtime){
+func Run(runtime falco.Runtime) {
 
 	ctx := context.Background()
 
 	dockerRunner := platforms.NewOpenWhiskDockerRunner(ctx)
 
-	whiksRunner,err := platforms.NewOpenWhisk()
+	whiksRunner, err := platforms.NewOpenWhisk()
 
 	if err != nil {
 		panic(err)
 	}
 
-
 	start := time.Now()
 	cmds := make([]*cli.Command, 0)
 
-	cmds = DockerCommandSetup(cmds,dockerRunner,runtime)
-	cmds = OWCommandSetup(cmds,whiksRunner,runtime)
+	cmds = DockerCommandSetup(cmds, dockerRunner, runtime)
+	cmds = OWCommandSetup(cmds, whiksRunner, runtime)
 
 	app := &cli.App{
 		EnableBashCompletion: true,
-		Name:                 "owmeda",
-		Usage:                fmt.Sprintf("SMILE FaaS Runner Utility, v%s", CommitHash),
+		Name:                 "falco",
+		Usage:                fmt.Sprintf("SMILE FaaS Runner Utility, v0"),
 		Flags:                SetupCommonFlags(),
 		Commands:             cmds,
 		Before: func(c *cli.Context) error {
 			SetFlags(c)
 			//inject settings based on flags
 			targetHost := c.String("host")
-			if targetHost != ""{
+			if targetHost != "" {
 				whiksRunner.Apply(platforms.WithHost(targetHost))
 			}
 			authToken := c.String("auth")
-			if authToken != ""{
+			if authToken != "" {
 				whiksRunner.Apply(platforms.WithAuthToken(authToken))
 			}
 
 			return nil
 		},
-
 	}
 
 	err = app.Run(os.Args)

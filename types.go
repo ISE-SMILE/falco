@@ -76,7 +76,7 @@ type Context struct {
 }
 
 func NewContext(name string) *Context {
-	return &Context{name: name}
+	return &Context{name: name, options: make(map[string]interface{})}
 }
 
 func (r *Context) Name() string {
