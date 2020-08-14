@@ -438,10 +438,6 @@ func (ow *OpenWhisk) fetchAsyncResult(job *falco.Job, pool chan struct{}, activa
 }
 
 func (ow *OpenWhisk) connect() error {
-	if ow.cli != nil {
-		return nil
-	}
-
 	//TODO: check if we can pick a better client?
 
 	baseurl, _ := whisk.GetURLBase(ow.Host, "/api")
@@ -453,6 +449,12 @@ func (ow *OpenWhisk) connect() error {
 		Insecure:  true,
 		Host:      ow.Host,
 		UserAgent: "Golang/Smile cli",
+	}
+
+	if ow.cli != nil {
+		if ow.cli.Config == clientConfig {
+			return nil
+		}
 	}
 
 	client, err := whisk.NewClient(http.DefaultClient, clientConfig)
