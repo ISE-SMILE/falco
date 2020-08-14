@@ -118,9 +118,16 @@ func ActionName() string {
 }
 
 func (ow *OpenWhisk) Deploy(deployable falco.Deployable) (falco.Deployment, error) {
+	var actionName string
+	if deployable.Name() == "" {
+		actionName = ActionName()
+	} else {
+		actionName = deployable.Name()
+	}
+
 	var qualifiedName = new(QualifiedName)
 	deployment := OpenWhiskDeployment{
-		ActionName: ActionName(),
+		ActionName: actionName,
 	}
 	var err error
 	context := deployable.Context()

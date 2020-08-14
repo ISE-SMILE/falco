@@ -71,7 +71,12 @@ func NewOpenWhiskDockerRunner(ctx context.Context) *OpenWhiskDockerRunner {
 }
 
 func (o OpenWhiskDockerRunner) Deploy(deployable falco.Deployable) (falco.Deployment, error) {
-	containerName := ContainerName()
+	var containerName string
+	if deployable.Name() == "" {
+		containerName = ContainerName()
+	} else {
+		containerName = deployable.Name()
+	}
 
 	containerReq, err := o.cli.ContainerCreate(o.ctx,
 		&container.Config{

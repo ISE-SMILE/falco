@@ -59,6 +59,7 @@ type InvocationPayload interface {
 }
 
 type Deployable interface {
+	Name() string
 	Payload() string
 	Context() *Context
 	Runtime() string
