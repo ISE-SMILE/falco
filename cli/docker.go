@@ -30,13 +30,13 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-
 type DockerCommand struct {
 	runner *platforms.OpenWhiskDockerRunner
 }
-func (d *DockerCommand) optionsFromFlags(c *cli.Context,ctx *falco.Context){
-	ctx.NewStingOption("host",c.String("host"))
-	ctx.NewIntOption("port",c.Int("port"))
+
+func (d *DockerCommand) optionsFromFlags(c *cli.Context, ctx *falco.Context) {
+	ctx.NewStingOption("host", c.String("host"))
+	ctx.NewIntOption("port", c.Int("port"))
 }
 
 func (d *DockerCommand) deploymentFromFlags(c *cli.Context) falco.Deployment {
@@ -65,13 +65,13 @@ func DockerCommandSetup(commands []*cli.Command,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     "host",
-				Usage:    "address of the AMEDA platform",
+				Usage:    "address of the platform",
 				Required: false,
 				Value:    "localhost",
 			},
 			&cli.IntFlag{
 				Name:     "port",
-				Usage:    "port of the AMEDA platform",
+				Usage:    "port of the platform",
 				Required: false,
 				Value:    8080,
 			},
@@ -103,31 +103,29 @@ func DockerCommandSetup(commands []*cli.Command,
 
 					files := c.Args().Slice()[1:]
 
-
 					ctx := falco.NewContext(jobname)
 
 					readCommonFlags(c, ctx)
-					cmd.optionsFromFlags(c,ctx)
+					cmd.optionsFromFlags(c, ctx)
 
 					deployable, err := runtime.MakeDeployment(ctx, files...)
-					if err != nil{
+					if err != nil {
 						return err
 					}
 
 					deployment, err := cmd.runner.Deploy(deployable)
 
 					if err == nil {
-						//TODO: print dep
-						fmt.Printf("Deplyment successfull %s",deployment.ID())
+						fmt.Printf("Deplyment successfull %s", deployment.ID())
 					}
 
 					return err
 				},
 			},
 			{
-				Name:      "remove",
-				Aliases:   []string{"rm"},
-				Usage:     "removes a AmeDA platform using docker",
+				Name:    "remove",
+				Aliases: []string{"rm"},
+				Usage:   "removes a AmeDA platform using docker",
 				Action: func(c *cli.Context) error {
 					deployment := cmd.deploymentFromFlags(c)
 

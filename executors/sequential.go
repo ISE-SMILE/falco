@@ -28,19 +28,17 @@ import (
 )
 
 type SequentialExecutor struct {
-
 }
 
 func (p SequentialExecutor) Execute(job *falco.Job,
 	submittable falco.Submittable,
-	collector *falco.ResultCollector) error {
+	collector falco.ResultCollector) error {
 
 	for _, payload := range job.Tasks {
-		err := submittable.Invoke(job.Deployment,payload,collector)
+		err := submittable.Invoke(job.Deployment, payload, collector)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
-

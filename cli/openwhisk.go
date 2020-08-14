@@ -33,8 +33,7 @@ import (
 	"time"
 )
 
-
-func OWCommandSetup(commands []*cli.Command,platfrom *platforms.OpenWhisk,runtime falco.Runtime) []*cli.Command {
+func OWCommandSetup(commands []*cli.Command, platfrom *platforms.OpenWhisk, runtime falco.Runtime) []*cli.Command {
 
 	cmd := OWCommand{
 		runner: platfrom,
@@ -46,24 +45,27 @@ func OWCommandSetup(commands []*cli.Command,platfrom *platforms.OpenWhisk,runtim
 		cmd:      &cmd,
 	}
 
-	sub := 	Submitter{
-		Invoker:    inv,
-		cmd:        &cmd,
-		submitter:  cmd.runner,
+	var samplesize float32 = 0.2
+
+	sub := Submitter{
+		Invoker:   inv,
+		cmd:       &cmd,
+		submitter: cmd.runner,
 		strategies: map[string]falco.ExecutionStrategy{
-			"async":&executors.AsyncExecutor{Timeout: 10*time.Minute},
-			"seq":&executors.SequentialExecutor{},
-			"parallel":&executors.ParallelExecutor{
+			"async": &executors.AsyncExecutor{Timeout: 10 * time.Minute},
+			"seq":   &executors.SequentialExecutor{},
+			"parallel": &executors.ParallelExecutor{
 				Threads: golang.NumCPU(),
 			},
-			//TODO: fix
-			"dist":&executors.DistributedExecutor{
-				QueueConnection: nil,
-				Timeout:         0,
-				TestInterval:    0,
-				Strategy:        executors.DeadlineStragglerStrategy{
-					DeadlineDuration: 4*time.Minute,
-					ReTryThreshold:   10,
+			//TODO: fix queueConnection..
+			"dist": &executors.DistributedExecutor{
+				Queue:        executors.RabbitMQWrapper{},
+				Timeout:      0,
+				TestInterval: 200,
+				Strategy: executors.MeanBackoffStragglerStrategy{
+					ReTryThreshold:    3,
+					MinimumSampleSize: &samplesize,
+					Graceperiod:       time.Millisecond * 100,
 				},
 			},
 		},
@@ -117,19 +119,17 @@ func OWCommandSetup(commands []*cli.Command,platfrom *platforms.OpenWhisk,runtim
 
 					readCommonFlags(c, ctx)
 
-
-
-					deployable,err := runtime.MakeDeployment(ctx,files ...)
-					if err != nil{
+					deployable, err := runtime.MakeDeployment(ctx, files...)
+					if err != nil {
 						return err
 					}
 
-					deployment,err := cmd.runner.Deploy(deployable)
+					deployment, err := cmd.runner.Deploy(deployable)
 
-					if err != nil{
+					if err != nil {
 						return err
 					}
-					fmt.Printf("deployed %s\n",deployment.ID())
+					fmt.Printf("deployed %s\n", deployment.ID())
 					return nil
 				},
 			},
@@ -161,13 +161,13 @@ type OWCommand struct {
 	runner *platforms.OpenWhisk
 }
 
-func ( *OWCommand) deploymentFromFlags(c *cli.Context) falco.Deployment {
+func (*OWCommand) deploymentFromFlags(c *cli.Context) falco.Deployment {
 	dep := platforms.OpenWhiskDeployment{
 		ActionName: c.String("action"),
 	}
 	return dep
 }
 
-func (ow *OWCommand) optionsFromFlags(c *cli.Context,ctx *falco.Context){
+func (ow *OWCommand) optionsFromFlags(c *cli.Context, ctx *falco.Context) {
 	//TODO??
 }

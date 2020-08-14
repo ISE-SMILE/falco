@@ -32,7 +32,7 @@ type ParallelExecutor struct {
 	Threads int
 }
 
-func (o ParallelExecutor) Execute(job *falco.Job, submittable falco.Submittable, collector *falco.ResultCollector) error {
+func (o ParallelExecutor) Execute(job *falco.Job, submittable falco.Submittable, collector falco.ResultCollector) error {
 	queue := make(chan falco.InvocationPayload, len(job.Tasks))
 
 	results := make(chan error)
@@ -40,7 +40,7 @@ func (o ParallelExecutor) Execute(job *falco.Job, submittable falco.Submittable,
 	worker := func(queue chan falco.InvocationPayload, returns chan error) {
 		var counter = 0
 		for payload := range queue {
-			err := submittable.Invoke(job.Deployment,payload,collector)
+			err := submittable.Invoke(job.Deployment, payload, collector)
 
 			counter += 1
 			returns <- err

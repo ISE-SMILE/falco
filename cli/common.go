@@ -29,10 +29,8 @@ import (
 	"github.com/ISE-SMILE/falco"
 	"github.com/urfave/cli/v2"
 	"io"
-	"net/url"
 	"os"
 )
-
 
 func SetupCommonFlags() []cli.Flag {
 	flags := make([]cli.Flag, 0)
@@ -127,38 +125,19 @@ func SetFlags(c *cli.Context) {
 func readCommonFlags(c *cli.Context, ctx *falco.Context) {
 	//read into params
 	if ctx != nil {
-		ctx.NewStingOption("S3",c.String("s3"))
-		ctx.NewStingOption("LOCAL_ACCESS_KEY_ID",c.String("s3access"))
-		ctx.NewStingOption("LOCAL_SECRET_KEY",c.String("s3secret"))
-		ctx.NewStingOption("S3_PROTOCOL",c.String("s3prot"))
-		ctx.NewStingOption("S3_SIGNER",c.String("s3sign"))
-		ctx.NewStingOption("S3_PREFIX","LOCAL")
+		ctx.NewStingOption("S3", c.String("s3"))
+		ctx.NewStingOption("LOCAL_ACCESS_KEY_ID", c.String("s3access"))
+		ctx.NewStingOption("LOCAL_SECRET_KEY", c.String("s3secret"))
+		ctx.NewStingOption("S3_PROTOCOL", c.String("s3prot"))
+		ctx.NewStingOption("S3_SIGNER", c.String("s3sign"))
+		ctx.NewStingOption("S3_PREFIX", "LOCAL")
 
-		ctx.NewStingOption("rmq_host",c.String("rmq"))
-		ctx.NewStingOption("rmq_port",fmt.Sprintf("%d", c.Int("rmqport")))
-		ctx.NewStingOption("rmq_user",c.String("rmquser"))
-		ctx.NewStingOption("rmq_password",c.String("rmqpass"))
+		ctx.NewStingOption("rmq_host", c.String("rmq"))
+		ctx.NewStingOption("rmq_port", fmt.Sprintf("%d", c.Int("rmqport")))
+		ctx.NewStingOption("rmq_user", c.String("rmquser"))
+		ctx.NewStingOption("rmq_password", c.String("rmqpass"))
 	}
 }
-
-func rmqConnectionStringFromFlags(c *cli.Context) string {
-	return fmt.Sprintf("amqp://%s:%s@%s:%d/", url.QueryEscape(c.String("rmquser")), url.QueryEscape(c.String("rmqpass")), c.String("rmq"), c.Int("rmqport"))
-}
-
-
-func writeResults(resultFile string, writer *falco.ResultCollector) error {
-	if writer != nil {
-		if verbose {
-			fmt.Printf("wrinting results to %s\n", resultFile)
-		}
-		err := writer.Write(resultFile)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 
 //func addFlags(c *cli.Context) map[string]string {
 //	params := make(map[string]string)
@@ -166,16 +145,15 @@ func writeResults(resultFile string, writer *falco.ResultCollector) error {
 //	return params
 //}
 
-
 func readJobsFile(jobfile string) ([]string, error) {
-	file,err := os.Open(jobfile)
+	file, err := os.Open(jobfile)
 
-	if err != nil{
-		return nil,err
+	if err != nil {
+		return nil, err
 	}
 
 	defer file.Close()
-	keys := make([]string,0)
+	keys := make([]string, 0)
 	reader := bufio.NewReader(file)
 	var line string
 	for {
@@ -184,13 +162,13 @@ func readJobsFile(jobfile string) ([]string, error) {
 		if err != nil {
 			break
 		}
-		keys = append(keys,line)
+		keys = append(keys, line)
 	}
 
 	if err != io.EOF {
-		return nil,err
+		return nil, err
 	} else {
-		return keys,nil
+		return keys, nil
 	}
 
 }

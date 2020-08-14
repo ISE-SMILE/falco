@@ -42,7 +42,7 @@ func StringWithCharset(length int, charset string) string {
 	return string(b)
 }
 
-func writeMeasurement(data falco.Measurement, payloadId string, duration time.Duration, writer *falco.ResultCollector) {
+func writeMeasurement(data falco.Measurement, payloadId string, duration time.Duration, writer falco.ResultCollector) {
 	data.WithDefaults()
 	data.SetRequestLatency(duration)
 	data.SetInvocationID(payloadId)

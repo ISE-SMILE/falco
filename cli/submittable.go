@@ -43,10 +43,10 @@ type Submitter struct {
 	strategies map[string]falco.ExecutionStrategy
 }
 
-func (s *Submitter) invokeStrategy(job *falco.Job, strategy falco.ExecutionStrategy,collector *falco.ResultCollector) error{
+func (s *Submitter) invokeStrategy(job *falco.Job, strategy falco.ExecutionStrategy, collector falco.ResultCollector) error {
 	err := strategy.Execute(job, s.submitter, collector)
 
-	if err != nil{
+	if err != nil {
 		return err
 	}
 
@@ -55,12 +55,12 @@ func (s *Submitter) invokeStrategy(job *falco.Job, strategy falco.ExecutionStrat
 
 func (s *Submitter) AddSubmitCommand() *cli.Command {
 
-	cmds := make([]*cli.Command,0)
+	cmds := make([]*cli.Command, 0)
 	for name, strategy := range s.strategies {
 		cmds = append(cmds, &cli.Command{
-			Name:                   name,
-			Aliases:                nil,
-			Usage:                  "[jobname] [bucket] [jobfile]",
+			Name:    name,
+			Aliases: nil,
+			Usage:   "[jobname] [bucket] [jobfile]",
 			Action: func(c *cli.Context) error {
 				jobname := c.Args().Get(0)
 				bucket := c.Args().Get(1)
@@ -75,9 +75,8 @@ func (s *Submitter) AddSubmitCommand() *cli.Command {
 
 				fmt.Printf("read job-file found %d keys \n", len(keys))
 
-
-				readCommonFlags(c,ctx)
-				s.cmd.optionsFromFlags(c,ctx)
+				readCommonFlags(c, ctx)
+				s.cmd.optionsFromFlags(c, ctx)
 
 				fmt.Printf("payloads preped \n")
 
@@ -92,7 +91,7 @@ func (s *Submitter) AddSubmitCommand() *cli.Command {
 					select {
 					case sig := <-signalChan:
 						fmt.Printf("Got %s signal. Aborting...\n", sig)
-						err = writer(c.String("result"),jobname, collector)
+						err = writer(c.String("result"), jobname, collector)
 						if err != nil {
 							fmt.Printf("failed to write %+v\n", err)
 						}
@@ -102,26 +101,25 @@ func (s *Submitter) AddSubmitCommand() *cli.Command {
 					}
 				}()
 
-				ctx.NewDurationOption("timeout",c.Duration("timeout"))
-				ctx.NewIntOption("threads",c.Int("threads"))
-				ctx.NewStingOption("inputBucket",bucket)
-				ctx.NewIntOption("grouping",c.Int("grouping"))
+				ctx.NewDurationOption("timeout", c.Duration("timeout"))
+				ctx.NewIntOption("threads", c.Int("threads"))
+				ctx.NewStingOption("inputBucket", bucket)
+				ctx.NewIntOption("grouping", c.Int("grouping"))
 
 				payload, err := s.runtime.InvocationPayload(ctx, keys...)
 
-				job := falco.NewJob(context.Background(),payload,c.Int("rps"),NewConsoleMonitor())
+				job := falco.NewJob(context.Background(), payload, c.Int("rps"), NewConsoleMonitor())
 
-
-				if err != nil{
+				if err != nil {
 					return err
 				}
 
-				err = s.invokeStrategy(job,strategy,collector)
-				if err != nil{
+				err = s.invokeStrategy(job, strategy, collector)
+				if err != nil {
 					return err
 				}
 
-				err = writer(c.String("result"),jobname, collector)
+				err = writer(c.String("result"), jobname, collector)
 
 				return err
 			},
@@ -167,9 +165,9 @@ func (s *Submitter) AddSubmitCommand() *cli.Command {
 	}
 }
 
-func writer(jobname,resultFileName string, collector *falco.ResultCollector, ) error {
+func writer(jobname, resultFileName string, collector falco.ResultCollector) error {
 	if resultFileName != "" {
-		err := collector.Write(fmt.Sprintf("%s%s", jobname,resultFileName))
+		err := collector.Write(fmt.Sprintf("%s%s", jobname, resultFileName))
 		if err != nil {
 			return err
 		}

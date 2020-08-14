@@ -30,20 +30,26 @@ import (
 	"sync"
 )
 
-type ResultCollector struct {
+type ResultCollector interface {
+	Add(measurement Measurement)
+	Write(string2 string) error
+	Print()
+}
+
+type CSVCollector struct {
 	lock   sync.RWMutex
 	data   map[string][]interface{}
 	length int
 }
 
-func NewCollector() *ResultCollector {
-	return &ResultCollector{
+func NewCollector() ResultCollector {
+	return &CSVCollector{
 		data:   make(map[string][]interface{}),
 		length: 0,
 	}
 }
 
-func (c *ResultCollector) Add(data Measurement) {
+func (c *CSVCollector) Add(data Measurement) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -52,15 +58,15 @@ func (c *ResultCollector) Add(data Measurement) {
 	data["jId"] = data.JobID()
 	envInfo := make([]string, 0)
 	for k := range data {
-		if k != "invocations"{
-			envInfo = append(envInfo,k)
+		if k != "invocations" {
+			envInfo = append(envInfo, k)
 		}
 	}
 
-	for _,elem := range invocations{
+	for _, elem := range invocations {
 		invocation := elem.(map[string]interface{})
 		//inject experiment JID
-		for _,k := range envInfo {
+		for _, k := range envInfo {
 			invocation[k] = data[k]
 		}
 		for k, v := range invocation {
@@ -77,7 +83,7 @@ func (c *ResultCollector) Add(data Measurement) {
 	}
 }
 
-func (c *ResultCollector) Write(outputfile string) error {
+func (c *CSVCollector) Write(outputfile string) error {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
@@ -125,24 +131,23 @@ func (c *ResultCollector) Write(outputfile string) error {
 	return nil
 }
 
-func (c *ResultCollector) Print() {
+func (c *CSVCollector) Print() {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
 	header := make([]string, 0)
 	for k := range c.data {
-		fmt.Printf("\t%25s",k)
+		fmt.Printf("\t%25s", k)
 		header = append(header, k)
 	}
 	fmt.Println()
 
-
 	for i := 0; i < c.length; i++ {
 		for _, key := range header {
 			if i < len(c.data[key]) {
-				fmt.Printf("\t%25v",c.data[key][i])
+				fmt.Printf("\t%25v", c.data[key][i])
 			} else {
-				fmt.Printf("\t%25v",nil)
+				fmt.Printf("\t%25v", nil)
 			}
 		}
 		fmt.Println()

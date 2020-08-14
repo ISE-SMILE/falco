@@ -27,5 +27,5 @@ package falco
 
 type Invokable interface {
 	//Invoke a makeDeploymentPayload directly
-	Invoke(Deployment, InvocationPayload, *ResultCollector) error
+	Invoke(Deployment, InvocationPayload, ResultCollector) error
 }

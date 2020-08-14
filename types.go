@@ -29,7 +29,7 @@ import (
 )
 
 type InvocationPayload interface {
-	//uniuqe task id (can be used to assosiate returned invocations to submitted invocations)
+	//uniuqe task IID (can be used to assosiate returned invocations to submitted invocations)
 	ID() string
 	//the time this payload was send
 	SubmittedAt() time.Time
@@ -49,13 +49,13 @@ type InvocationPayload interface {
 
 	//the runitme used to generate this invocation
 	Runtime() Runtime
-	//Set compleated to true and stores compleation time
+	//Set completed to true and stores compleation time
 	Done()
 
 	//writer.Add(payload.Runtime().MakeFailure(payload.ID(),payload.Error().Error(),payload.SubmittedAt()))
-	WriteError(writer *ResultCollector)
-
-
+	WriteError(writer ResultCollector)
+	//is called if a task gets resubmitted (due to error or because it seamed to straggle)
+	MarkAsResubmitted()
 }
 
 type Deployable interface {
@@ -68,10 +68,10 @@ type Deployment interface {
 	ID() string
 }
 
-type ScaleOptions func (deployment Deployment)
+type ScaleOptions func(deployment Deployment)
 
 type Context struct {
-	name string
+	name    string
 	options map[string]interface{}
 }
 
@@ -79,41 +79,40 @@ func NewContext(name string) *Context {
 	return &Context{name: name}
 }
 
-
-func (r *Context) Name() string{
+func (r *Context) Name() string {
 	return r.name
 }
 
-func (r *Context) add(name string, value interface{}){
+func (r *Context) add(name string, value interface{}) {
 	r.options[name] = value
 }
 
 func (r *Context) IsSet(name string) bool {
-	_,ok := r.options[name];
+	_, ok := r.options[name]
 	return ok
 }
 
-func (r *Context) String(name,defaultValue string) string {
-	if val,ok := r.options[name]; ok {
-		if value,ok := val.(string);ok {
+func (r *Context) String(name, defaultValue string) string {
+	if val, ok := r.options[name]; ok {
+		if value, ok := val.(string); ok {
 			return value
 		}
 	}
 	return defaultValue
 }
 
-func (r *Context) Int(name string,defaultValue int) int {
-	if val,ok := r.options[name]; ok {
-		if value,ok := val.(int);ok {
+func (r *Context) Int(name string, defaultValue int) int {
+	if val, ok := r.options[name]; ok {
+		if value, ok := val.(int); ok {
 			return value
 		}
 	}
 	return defaultValue
 }
 
-func (r *Context) Duration(name string,defaultValue time.Duration) time.Duration {
-	if val,ok := r.options[name]; ok {
-		if value,ok := val.( time.Duration);ok {
+func (r *Context) Duration(name string, defaultValue time.Duration) time.Duration {
+	if val, ok := r.options[name]; ok {
+		if value, ok := val.(time.Duration); ok {
 			return value
 		}
 	}
@@ -121,8 +120,8 @@ func (r *Context) Duration(name string,defaultValue time.Duration) time.Duration
 }
 
 func (r *Context) Slice(name string) []string {
-	if val,ok := r.options[name]; ok {
-		if value,ok := val.([]string);ok {
+	if val, ok := r.options[name]; ok {
+		if value, ok := val.([]string); ok {
 			return value
 		}
 	}
@@ -130,8 +129,8 @@ func (r *Context) Slice(name string) []string {
 }
 
 func (r *Context) Bool(name string) bool {
-	if val,ok := r.options[name]; ok {
-		if value,ok := val.(bool);ok {
+	if val, ok := r.options[name]; ok {
+		if value, ok := val.(bool); ok {
 			return value
 		}
 	}
@@ -141,7 +140,7 @@ func (r *Context) Bool(name string) bool {
 func (r *Context) ToMap() map[string]string {
 	opts := make(map[string]string)
 	for k, i := range r.options {
-		if val,ok := i.(string);ok{
+		if val, ok := i.(string); ok {
 			opts[k] = val
 		}
 	}
@@ -151,7 +150,7 @@ func (r *Context) ToMap() map[string]string {
 func (r *Context) PrefixMap(prefix string) map[string]string {
 	opts := make(map[string]string)
 	for k, i := range r.options {
-		if strings.HasPrefix(k,prefix) {
+		if strings.HasPrefix(k, prefix) {
 			if val, ok := i.(string); ok {
 				opts[k] = val
 			}
@@ -160,23 +159,21 @@ func (r *Context) PrefixMap(prefix string) map[string]string {
 	return opts
 }
 
-
-func (r *Context) NewStingOption(name,value string){
-	r.add(name,value)
+func (r *Context) NewStingOption(name, value string) {
+	r.add(name, value)
 }
-func (r *Context) NewIntOption(name string,value int){
-	r.add(name,value)
+func (r *Context) NewIntOption(name string, value int) {
+	r.add(name, value)
 }
-func (r *Context) NewDurationOption(name string,value time.Duration){
-	r.add(name,value)
+func (r *Context) NewDurationOption(name string, value time.Duration) {
+	r.add(name, value)
 }
-func (r *Context) NewSliceOption(name string,value []string){
-	r.add(name,value)
+func (r *Context) NewSliceOption(name string, value []string) {
+	r.add(name, value)
 }
-func (r *Context) NewBoolOption(name string,value bool){
-	r.add(name,value)
+func (r *Context) NewBoolOption(name string, value bool) {
+	r.add(name, value)
 }
-
 
 type InvocableOptions interface {
 	Apply()

@@ -1,4 +1,4 @@
-# Falco - <ins>Fa</ins>as-based <ins>l</ins>arge-scale <ins>Co</ins>mputing 
+# Falco - <ins>Fa</ins>aS-based <ins>l</ins>arge-scale <ins>Co</ins>mputing 
 <p align="center">
  <img src="https://raw.githubusercontent.com/ISE-SMILE/falco/master/logo.svg" height=170/>
 </p>

@@ -35,14 +35,14 @@ type AsyncExecutor struct {
 	Timeout time.Duration
 }
 
-func (p AsyncExecutor) Execute(job *falco.Job, submittable falco.Submittable, collector *falco.ResultCollector)  error {
+func (p AsyncExecutor) Execute(job *falco.Job, submittable falco.Submittable, collector falco.ResultCollector) error {
 
 	activations := make(chan map[string]interface{}, len(job.Tasks))
 	start := time.Now()
 
 	go func() {
 		time.Sleep(1000 * time.Millisecond)
-		err := submittable.Collect(job,activations,collector) //(job, activations, writer)
+		err := submittable.Collect(job, activations, collector) //(job, activations, writer)
 		if err != nil {
 			fmt.Printf("%+v\n", err)
 		}
@@ -50,7 +50,7 @@ func (p AsyncExecutor) Execute(job *falco.Job, submittable falco.Submittable, co
 
 	job.Info(fmt.Sprintf("submitting %d jobs\n", len(job.Tasks)))
 
-	submitJobAsync(submittable, job.Tasks,job, activations)
+	submitJobAsync(submittable, job.Tasks, job, activations)
 
 	job.Info(fmt.Sprintf("submitted %d jobs", len(job.Tasks)))
 

@@ -48,94 +48,100 @@ type Job struct {
 	Context Context
 	//
 	Deployment Deployment
-	//tasks
-	Submitted  map[string]InvocationPayload
-	Tasks []InvocationPayload
+	//submissions
+	submitted map[string]InvocationPayload
+	completed map[string]InvocationPayload
+	Tasks     []InvocationPayload
 
 	//rate-limiting
 	query ratelimit.Limiter
 	spawn *rate.Limiter
 	//sync
-	wg   sync.WaitGroup
-	lock sync.Mutex
-	cancel  context.CancelFunc
+	wg     sync.WaitGroup
+	lock   sync.Mutex
+	cancel context.CancelFunc
 
 	//internals
-	tasks       atomic.Int64
-	_waitCancel chan interface{}
+	submissions atomic.Int64
 	//output
 	monitor ProgressMonitor
-
 }
 
-func NewJob(ctx context.Context,  tasks []InvocationPayload,
-	requestsPerSeconds int, monitor ProgressMonitor,) *Job {
-	jobCtx,cancel := context.WithCancel(ctx)
+func NewJob(ctx context.Context, tasks []InvocationPayload,
+	requestsPerSeconds int, monitor ProgressMonitor) *Job {
+	jobCtx, cancel := context.WithCancel(ctx)
 	job := &Job{
-		ctx:   jobCtx,
-		spawn: rate.NewLimiter(rate.Every(time.Minute/time.Duration(requestsPerSeconds)), 10),
-		query: ratelimit.New(requestsPerSeconds),
-		monitor : monitor,
-		Tasks: tasks,
-		Submitted: make(map[string]InvocationPayload),
-		_waitCancel: make(chan interface{}),
-		cancel:cancel,
+		ctx:       jobCtx,
+		spawn:     rate.NewLimiter(rate.Every(time.Minute/time.Duration(requestsPerSeconds)), 10),
+		query:     ratelimit.New(requestsPerSeconds),
+		monitor:   monitor,
+		Tasks:     tasks,
+		submitted: make(map[string]InvocationPayload),
+		completed: make(map[string]InvocationPayload),
+		cancel:    cancel,
 	}
-	if job.monitor != nil{
+	if job.monitor != nil {
 		job.monitor.Setup()
 	}
 
 	return job
 }
 
-func (j *Job) Add(delta int) {
-	j.lock.Lock()
-	defer j.lock.Unlock()
-
-	if j.monitor != nil{
-		j.monitor.Expand(delta)
-	}
-
-	j.wg.Add(delta)
-	j.tasks.Add(1)
+func (j *Job) Name() string {
+	return j.Context.Name()
 }
 
-func (j *Job) Done() {
-	if j.tasks.Load() > 0 {
+func (j *Job) Done(payloadID string) {
+
+	if j.submissions.Load() > 0 {
 		j.wg.Done()
 	}
 
-	if j.monitor != nil{
+	if j.monitor != nil {
 		j.monitor.Advance(1)
 	}
 
-	j.tasks.Sub(1)
+	if payload, err := j.PayloadFromId(payloadID); err == nil {
+		if _, ok := j.completed[payloadID]; ok {
+			//we have an already done job, we ignore it.
+			fmt.Printf("recived a task that was already complet %s\n", payloadID)
+		} else {
+			j.lock.Lock()
+			//we only want to collect the first occorance of a payload
+			j.completed[payloadID] = payload
+			j.lock.Unlock()
+		}
+	} else {
+		fmt.Printf("completed a tasks we did  not submit jet %s\n", payloadID)
+	}
+
+	j.submissions.Sub(1)
 }
 
 func (j *Job) Wait() {
-	if j.monitor != nil{
+	if j.monitor != nil {
 		j.monitor.Render()
 	}
 
 	waitDelegate := make(chan struct{})
-	go func(){
+	go func() {
 		defer close(waitDelegate)
 		j.wg.Wait()
 	}()
 	select {
-		case <-waitDelegate:
-		case <-j._waitCancel:
+	case <-waitDelegate:
+	case <-j.ctx.Done():
 	}
 
-	if j.monitor != nil{
-		j.Finish()
+	if j.monitor != nil {
+		j.monitor.Finish()
 	}
 
 }
 
 func (j *Job) Info(text string) {
-	if j.monitor != nil{
-		j.Info(text)
+	if j.monitor != nil {
+		j.monitor.Info(text)
 	}
 }
 
@@ -148,12 +154,15 @@ func (j *Job) WithTimeout(timeout time.Duration) error {
 	}()
 
 	select {
-	case <-j._waitCancel:
+	case <-j.ctx.Done():
 		return nil
 	case <-waitDelegate:
 		return nil
 	case <-time.After(timeout):
-		j.monitor.Finish()
+		if j.monitor != nil {
+			j.monitor.Finish()
+		}
+		j.Cancel()
 		return fmt.Errorf("timed out after %+v", timeout)
 	}
 }
@@ -172,14 +181,68 @@ func (j *Job) TakeSpawn() time.Time {
 }
 
 func (j *Job) Finish() {
-	close(j._waitCancel)
+	j.cancel()
 }
 
 func (j *Job) AsParentContext() context.Context {
 	return j.ctx
 }
 
-func (j *Job) Cancel(){
+func (j *Job) Cancel() {
 	j.cancel()
 	j.Finish()
+}
+
+func (j *Job) SubmittedTask(payload InvocationPayload) {
+	j.lock.Lock()
+	defer j.lock.Unlock()
+
+	if j.monitor != nil {
+		j.monitor.Expand(1)
+	}
+
+	j.wg.Add(1)
+	j.submissions.Add(1)
+	if _, ok := j.submitted[payload.ID()]; ok {
+		payload.MarkAsResubmitted()
+	}
+	j.submitted[payload.ID()] = payload
+}
+
+func (j *Job) PayloadFromId(payloadID string) (InvocationPayload, error) {
+	j.lock.Lock()
+	defer j.lock.Unlock()
+	if val, ok := j.submitted[payloadID]; ok {
+		return val, nil
+	} else {
+		return nil, fmt.Errorf("not yet submitted or unknown")
+	}
+}
+
+func (j *Job) PrintStats() {
+	totalTime := time.Duration(0)
+	failed := 0
+	min := time.Now()
+	for _, t := range j.completed {
+		if t.Error() == nil {
+			if t.SubmittedAt().Before(min) {
+				min = t.SubmittedAt()
+			}
+			totalTime += t.Latancy()
+		} else {
+			failed++
+		}
+	}
+
+	if len(j.completed) > 0 {
+		duration := time.Now().Sub(min)
+		mean := time.Duration(int64(totalTime) / int64(len(j.completed)))
+
+		fmt.Printf("job done with a mean task execution time of %+v a total runtime of %+v and %d failed requests\n",
+			mean, duration, failed)
+
+	} else {
+		fmt.Printf("job done with %d failed requests\n",
+			failed)
+	}
 }
