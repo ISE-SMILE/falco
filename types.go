@@ -153,7 +153,7 @@ func (r *Context) PrefixMap(prefix string) map[string]string {
 	for k, i := range r.options {
 		if strings.HasPrefix(k, prefix) {
 			if val, ok := i.(string); ok {
-				key := strings.TrimPrefix(prefix, k)
+				key := strings.TrimPrefix(k, prefix)
 				opts[key] = val
 			}
 		}
