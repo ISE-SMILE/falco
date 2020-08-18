@@ -136,7 +136,10 @@ func readCommonFlags(c *cli.Context, ctx *falco.Context) {
 		ctx.NewStingOption("rmq_port", fmt.Sprintf("%d", c.Int("rmqport")))
 		ctx.NewStingOption("rmq_user", c.String("rmquser"))
 		ctx.NewStingOption("rmq_password", c.String("rmqpass"))
+
+		ctx.Insert("env", ctx.AsMap())
 	}
+
 }
 
 //func addFlags(c *cli.Context) map[string]string {

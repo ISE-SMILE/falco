@@ -29,7 +29,7 @@ import (
 )
 
 type InvokerCommand interface {
-	optionsFromFlags(c *cli.Context,ctx *falco.Context)
+	optionsFromFlags(c *cli.Context, ctx *falco.Context)
 	deploymentFromFlags(c *cli.Context) falco.Deployment
 }
 
@@ -69,10 +69,10 @@ func (i *Invoker) AddInvokeCommand() *cli.Command {
 					input := c.Args().Get(1)
 
 					ctx := falco.NewContext(jobname)
-					readCommonFlags(c,ctx)
-					i.cmd.optionsFromFlags(c,ctx)
+					readCommonFlags(c, ctx)
+					i.cmd.optionsFromFlags(c, ctx)
 
-					return i.file(ctx,i.cmd.deploymentFromFlags(c),input)
+					return i.file(ctx, i.cmd.deploymentFromFlags(c), input)
 				},
 			},
 			{
@@ -80,7 +80,7 @@ func (i *Invoker) AddInvokeCommand() *cli.Command {
 				Aliases:   []string{"s"},
 				Usage:     "sends a S3-URLs as invocation",
 				ArgsUsage: "[jobname] [Input Bucket key] [jobfile]",
-				Action:    func(c *cli.Context) error {
+				Action: func(c *cli.Context) error {
 					jobname := c.Args().Get(0)
 					bucket := c.Args().Get(1)
 					jobfile := c.Args().Get(2)
@@ -91,12 +91,11 @@ func (i *Invoker) AddInvokeCommand() *cli.Command {
 					}
 
 					ctx := falco.NewContext(jobname)
-					readCommonFlags(c,ctx)
-					ctx.NewStingOption("inputBucket",bucket)
-					ctx.NewStingOption("inputBucket",bucket)
-					i.cmd.optionsFromFlags(c,ctx)
+					readCommonFlags(c, ctx)
+					ctx.NewStingOption("inputBucket", bucket)
+					i.cmd.optionsFromFlags(c, ctx)
 
-					return i.s3(ctx,i.cmd.deploymentFromFlags(c),keys)
+					return i.s3(ctx, i.cmd.deploymentFromFlags(c), keys)
 				},
 			},
 			{
@@ -104,7 +103,7 @@ func (i *Invoker) AddInvokeCommand() *cli.Command {
 				Aliases:   []string{"d"},
 				Usage:     "sends a S3 URLs as invocation",
 				ArgsUsage: "[jobname] [bucketName] [jobfile])",
-				Action:    func(c *cli.Context) error {
+				Action: func(c *cli.Context) error {
 					jobname := c.Args().Get(0)
 					bucket := c.Args().Get(1)
 					jobfile := c.Args().Get(2)
@@ -115,21 +114,21 @@ func (i *Invoker) AddInvokeCommand() *cli.Command {
 					}
 
 					ctx := falco.NewContext(jobname)
-					readCommonFlags(c,ctx)
-					ctx.NewStingOption("inputBucket",bucket)
-					i.cmd.optionsFromFlags(c,ctx)
+					readCommonFlags(c, ctx)
+					ctx.NewStingOption("inputBucket", bucket)
+					i.cmd.optionsFromFlags(c, ctx)
 
-					return i.s3(ctx,i.cmd.deploymentFromFlags(c),keys)
+					return i.s3(ctx, i.cmd.deploymentFromFlags(c), keys)
 				},
 			},
 		},
 	}
 }
 
-func (i *Invoker) invoke(mode int, ctx *falco.Context, deployment falco.Deployment, keys ... string) error {
+func (i *Invoker) invoke(mode int, ctx *falco.Context, deployment falco.Deployment, keys ...string) error {
 
-	ctx.NewIntOption("mode",mode)
-	payload,err := i.runtime.InvocationPayload(ctx,keys...)
+	ctx.NewIntOption("mode", mode)
+	payload, err := i.runtime.InvocationPayload(ctx, keys...)
 	if err != nil {
 		return err
 	}
@@ -144,15 +143,13 @@ func (i *Invoker) invoke(mode int, ctx *falco.Context, deployment falco.Deployme
 }
 
 func (i *Invoker) s3(ctx *falco.Context, deployment falco.Deployment, keys []string) error {
-	return i.invoke(1,ctx,deployment,keys...)
+	return i.invoke(1, ctx, deployment, keys...)
 }
 
-
 func (i *Invoker) s3d(ctx *falco.Context, deployment falco.Deployment, keys []string) error {
-	return i.invoke(2,ctx,deployment,keys...)
+	return i.invoke(2, ctx, deployment, keys...)
 }
 
 func (i *Invoker) file(ctx *falco.Context, deployment falco.Deployment, input string) error {
-	return i.invoke(0,ctx,deployment,input)
+	return i.invoke(0, ctx, deployment, input)
 }
-

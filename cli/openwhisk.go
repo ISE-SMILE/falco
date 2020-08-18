@@ -149,7 +149,7 @@ func OWCommandSetup(commands []*cli.Command, platfrom *platforms.OpenWhisk, runt
 				},
 			},
 			{
-				Name:    "removes",
+				Name:    "remove",
 				Aliases: []string{"rm"},
 				Usage:   "removes a runtime from OpenWhisk",
 
@@ -160,9 +160,27 @@ func OWCommandSetup(commands []*cli.Command, platfrom *platforms.OpenWhisk, runt
 				},
 			},
 			{
-				Name:   "update",
-				Usage:  "updates an existing deployment",
-				Action: nil,
+				Name:  "update",
+				Usage: "updates an existing deployment",
+				Flags: []cli.Flag{
+					&cli.IntFlag{
+						Name:     "memory",
+						Aliases:  []string{"m"},
+						Usage:    "Amount of Memory for the function",
+						Value:    256,
+						Required: true,
+					},
+				},
+				ArgsUsage: "[jobname] [template file] [script file] ",
+				Action: func(c *cli.Context) error {
+					dep := cmd.deploymentFromFlags(c)
+					memory := c.Int("memory")
+					dep, err := cmd.runner.Scale(dep, platforms.ScaleMemory(memory))
+					if err == nil {
+						fmt.Printf("updated %s with %d memory", dep.ID(), memory)
+					}
+					return err
+				},
 			},
 			inv.AddInvokeCommand(),
 			sub.AddSubmitCommand(),

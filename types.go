@@ -153,7 +153,8 @@ func (r *Context) PrefixMap(prefix string) map[string]string {
 	for k, i := range r.options {
 		if strings.HasPrefix(k, prefix) {
 			if val, ok := i.(string); ok {
-				opts[k] = val
+				key := strings.TrimPrefix(prefix, k)
+				opts[key] = val
 			}
 		}
 	}
@@ -174,6 +175,18 @@ func (r *Context) NewSliceOption(name string, value []string) {
 }
 func (r *Context) NewBoolOption(name string, value bool) {
 	r.add(name, value)
+}
+
+func (r *Context) AsMap() map[string]interface{} {
+	return r.options
+}
+
+func (r *Context) Insert(prefix string, values map[string]interface{}) {
+	if values != nil {
+		for k, v := range values {
+			r.options[prefix+k] = v
+		}
+	}
 }
 
 type InvocableOptions interface {
