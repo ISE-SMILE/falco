@@ -24,6 +24,7 @@
 package cli
 
 import (
+	"fmt"
 	"github.com/ISE-SMILE/falco"
 	"github.com/urfave/cli/v2"
 )
@@ -128,18 +129,29 @@ func (i *Invoker) AddInvokeCommand() *cli.Command {
 func (i *Invoker) invoke(mode int, ctx *falco.Context, deployment falco.Deployment, keys ...string) error {
 
 	ctx.NewIntOption("mode", mode)
-	payload, err := i.runtime.InvocationPayload(ctx, keys...)
+	payloads, err := i.runtime.InvocationPayload(ctx, keys...)
 	if err != nil {
 		return err
 	}
 
 	collector := falco.NewCollector()
 
-	err = i.platform.Invoke(deployment, payload[0], collector)
+	errors := make([]error, 0)
+	for _, payload := range payloads {
+		err = i.platform.Invoke(deployment, payload, collector)
+		if err != nil {
+			fmt.Printf("%s failed with %+v\n", payload.ID(), err)
+			errors = append(errors, err)
+		}
+	}
 
 	collector.Print()
 
-	return err
+	if len(errors) > 0 {
+		return fmt.Errorf("invocation failed with:%+v", errors)
+	}
+
+	return nil
 }
 
 func (i *Invoker) s3(ctx *falco.Context, deployment falco.Deployment, keys []string) error {
