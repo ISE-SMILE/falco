@@ -119,7 +119,7 @@ func (i *Invoker) AddInvokeCommand() *cli.Command {
 					ctx.NewStingOption("inputBucket", bucket)
 					i.cmd.optionsFromFlags(c, ctx)
 
-					return i.s3(ctx, i.cmd.deploymentFromFlags(c), keys)
+					return i.s3d(ctx, i.cmd.deploymentFromFlags(c), keys)
 				},
 			},
 		},
