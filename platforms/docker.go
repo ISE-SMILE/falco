@@ -98,6 +98,9 @@ func (o OpenWhiskDockerRunner) Deploy(deployable falco.Deployable) (falco.Deploy
 		return nil, err
 	}
 
+	//TODO: remove
+	fmt.Printf("started %s - sending init", containerReq.ID)
+
 	deployment := &DockerDeployment{
 		ContainerID:   containerReq.ID,
 		containerName: containerName,
@@ -105,10 +108,20 @@ func (o OpenWhiskDockerRunner) Deploy(deployable falco.Deployable) (falco.Deploy
 		activationID:  StringWithCharset(15, charset),
 	}
 
+	err = o.Init(deployable, deployment)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return deployment, nil
+}
+
+func (o OpenWhiskDockerRunner) Init(deployable falco.Deployable, deployment *DockerDeployment) error {
 	envMap := map[string]string{
 		"__OW_API_KEY":       "",
 		"__OW_NAMESPACE":     deployment.nameSpace,
-		"__OW_ACTION_NAME":   containerName,
+		"__OW_ACTION_NAME":   deployment.containerName,
 		"__OW_ACTIVATION_ID": deployment.activationID,
 	}
 	deploymentContext := deployable.Context()
@@ -129,19 +142,27 @@ func (o OpenWhiskDockerRunner) Deploy(deployable falco.Deployable) (falco.Deploy
 
 	requestBody, err := json.Marshal(msg)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	initResp, err := http.Post("http://127.0.0.1:8080/init", "application/json",
 		bytes.NewReader(requestBody))
 
 	if err != nil {
-		return nil, err
+		return err
 	}
-	//TODO: remove
-	fmt.Printf("%s send init, got:%d", containerReq.ID, initResp.StatusCode)
 
-	return deployment, nil
+	fmt.Printf("send init %d with %s", initResp.StatusCode, unwrap(ioutil.ReadAll(initResp.Body)))
+
+	return nil
+}
+
+func unwrap(in []byte, err error) string {
+	if err != nil {
+		return ""
+	} else {
+		return string(in)
+	}
 }
 
 func (o OpenWhiskDockerRunner) Remove(deployment falco.Deployment) error {

@@ -123,6 +123,43 @@ func DockerCommandSetup(commands []*cli.Command,
 				},
 			},
 			{
+				Name:    "init",
+				Aliases: []string{"i"},
+				Usage:   "init a new runtime",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:     "compiled",
+						Aliases:  []string{"cmp"},
+						Usage:    "Indicate that the provided template is compiled or not",
+						Value:    false,
+						Required: false,
+					},
+				},
+				ArgsUsage: "[jobname] [file1] ... [fileN]",
+				Action: func(c *cli.Context) error {
+					jobname := c.Args().Get(0)
+
+					files := c.Args().Slice()[1:]
+
+					ctx := falco.NewContext(jobname)
+
+					readCommonFlags(c, ctx)
+					cmd.optionsFromFlags(c, ctx)
+
+					deployable, err := runtime.MakeDeployment(ctx, files...)
+					if err != nil {
+						return err
+					}
+
+					deployment := cmd.deploymentFromFlags(c)
+
+					dockerDeployment := deployment.(platforms.DockerDeployment)
+					err = cmd.runner.Init(deployable, &dockerDeployment)
+
+					return err
+				},
+			},
+			{
 				Name:    "remove",
 				Aliases: []string{"rm"},
 				Usage:   "removes a AmeDA platform using docker",
