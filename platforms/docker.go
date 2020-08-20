@@ -207,7 +207,7 @@ func (o OpenWhiskDockerRunner) Invoke(deployment falco.Deployment, payload falco
 	}
 
 	start := time.Now()
-	resp, err := http.Post("http://127.0.0.1:8080", "application/json", bytes.NewReader(requestBody))
+	resp, err := http.Post("http://127.0.0.1:8080/run", "application/json", bytes.NewReader(requestBody))
 	elapsed := time.Since(start)
 
 	if err != nil {
