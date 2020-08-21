@@ -37,7 +37,7 @@ import (
 )
 
 type StragglerStrategy interface {
-	SelectStranglers(job *falco.Job, p DistributedExecutor) ([]falco.InvocationPayload, []falco.InvocationPayload, int)
+	SelectStranglers(job *falco.Job, p *DistributedExecutor) ([]falco.InvocationPayload, []falco.InvocationPayload, int)
 }
 
 type DEQueueMessage interface {
@@ -59,7 +59,7 @@ type DeadlineStragglerStrategy struct {
 	ReTryThreshold   int8
 }
 
-func (d DeadlineStragglerStrategy) SelectStranglers(job *falco.Job, p DistributedExecutor) ([]falco.InvocationPayload, []falco.InvocationPayload, int) {
+func (d DeadlineStragglerStrategy) SelectStranglers(job *falco.Job, p *DistributedExecutor) ([]falco.InvocationPayload, []falco.InvocationPayload, int) {
 	stranglers := make([]falco.InvocationPayload, 0)
 	failures := make([]falco.InvocationPayload, 0)
 	completed := 0
@@ -91,7 +91,7 @@ type MeanBackoffStragglerStrategy struct {
 	Graceperiod time.Duration
 }
 
-func (m MeanBackoffStragglerStrategy) SelectStranglers(job *falco.Job, p DistributedExecutor) ([]falco.InvocationPayload, []falco.InvocationPayload, int) {
+func (m MeanBackoffStragglerStrategy) SelectStranglers(job *falco.Job, p *DistributedExecutor) ([]falco.InvocationPayload, []falco.InvocationPayload, int) {
 	stranglers := make([]falco.InvocationPayload, 0)
 	failures := make([]falco.InvocationPayload, 0)
 	completed := 0
@@ -137,7 +137,7 @@ type DistributedExecutor struct {
 	Strategy     StragglerStrategy
 }
 
-func (p DistributedExecutor) Execute(job *falco.Job, submittable falco.Submittable, writer falco.ResultCollector) error {
+func (p *DistributedExecutor) Execute(job *falco.Job, submittable falco.Submittable, writer falco.ResultCollector) error {
 
 	err := p.Queue.Connect()
 	if err != nil {
@@ -226,7 +226,7 @@ func (p DistributedExecutor) Execute(job *falco.Job, submittable falco.Submittab
 	return err
 }
 
-func (p DistributedExecutor) collectMetrics(job *falco.Job, queueName string,
+func (p *DistributedExecutor) collectMetrics(job *falco.Job, queueName string,
 	writer falco.ResultCollector) error {
 	metrics, err := p.Queue.Consume(queueName)
 
@@ -267,7 +267,7 @@ func (p DistributedExecutor) collectMetrics(job *falco.Job, queueName string,
 
 }
 
-func (p DistributedExecutor) collectStage(job *falco.Job, queueName string,
+func (p *DistributedExecutor) collectStage(job *falco.Job, queueName string,
 	writer falco.ResultCollector) error {
 	acks, err := p.Queue.Consume(queueName)
 
@@ -298,7 +298,7 @@ func (p DistributedExecutor) collectStage(job *falco.Job, queueName string,
 	return nil
 }
 
-func (p DistributedExecutor) observeJobs(job *falco.Job, cmd falco.Submittable, writer falco.ResultCollector) {
+func (p *DistributedExecutor) observeJobs(job *falco.Job, cmd falco.Submittable, writer falco.ResultCollector) {
 	for {
 		select {
 		case <-time.After(p.TestInterval):
@@ -336,7 +336,7 @@ func (p DistributedExecutor) observeJobs(job *falco.Job, cmd falco.Submittable, 
 	}
 }
 
-func (p DistributedExecutor) selectStranglers(job *falco.Job) ([]falco.InvocationPayload, []falco.InvocationPayload, int) {
+func (p *DistributedExecutor) selectStranglers(job *falco.Job) ([]falco.InvocationPayload, []falco.InvocationPayload, int) {
 	return p.Strategy.SelectStranglers(job, p)
 }
 
