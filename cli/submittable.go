@@ -85,8 +85,7 @@ func (s *Submitter) AddSubmitCommand() *cli.Command {
 
 				fmt.Printf("read job-file found %d keys \n", len(keys))
 
-				readCommonFlags(c, ctx)
-				s.cmd.optionsFromFlags(c, ctx)
+				s.addFlags(c, ctx)
 
 				fmt.Printf("payloads preped \n")
 
