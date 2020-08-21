@@ -53,6 +53,16 @@ func (s *Submitter) invokeStrategy(job *falco.Job, strategy falco.ExecutionStrat
 	return nil
 }
 
+func (s *Submitter) addFlags(c *cli.Context, ctx *falco.Context) {
+	readCommonFlags(c, ctx)
+
+	ctx.NewDurationOption("timeout", c.Duration("timeout"))
+	ctx.NewIntOption("threads", c.Int("threads"))
+	ctx.NewIntOption("grouping", c.Int("grouping"))
+
+	s.cmd.optionsFromFlags(c, ctx)
+}
+
 func (s *Submitter) AddSubmitCommand() *cli.Command {
 
 	cmds := make([]*cli.Command, 0)
@@ -101,10 +111,7 @@ func (s *Submitter) AddSubmitCommand() *cli.Command {
 					}
 				}()
 
-				ctx.NewDurationOption("timeout", c.Duration("timeout"))
-				ctx.NewIntOption("threads", c.Int("threads"))
 				ctx.NewStingOption("inputBucket", bucket)
-				ctx.NewIntOption("grouping", c.Int("grouping"))
 
 				payload, err := s.runtime.InvocationPayload(ctx, keys...)
 

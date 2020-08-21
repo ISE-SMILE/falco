@@ -40,6 +40,13 @@ type Invoker struct {
 	cmd      InvokerCommand
 }
 
+func (i *Invoker) addFlags(c *cli.Context, ctx *falco.Context) {
+	readCommonFlags(c, ctx)
+	ctx.NewIntOption("grouping", c.Int("grouping"))
+	ctx.NewStingOption("grouping", c.String("result"))
+	i.cmd.optionsFromFlags(c, ctx)
+}
+
 func (i *Invoker) AddInvokeCommand() *cli.Command {
 	return &cli.Command{
 		Name:    "invoke",
@@ -70,8 +77,7 @@ func (i *Invoker) AddInvokeCommand() *cli.Command {
 					input := c.Args().Get(1)
 
 					ctx := falco.NewContext(jobname)
-					readCommonFlags(c, ctx)
-					i.cmd.optionsFromFlags(c, ctx)
+					i.addFlags(c, ctx)
 
 					return i.file(ctx, i.cmd.deploymentFromFlags(c), input)
 				},
@@ -92,9 +98,8 @@ func (i *Invoker) AddInvokeCommand() *cli.Command {
 					}
 
 					ctx := falco.NewContext(jobname)
-					readCommonFlags(c, ctx)
+					i.addFlags(c, ctx)
 					ctx.NewStingOption("inputBucket", bucket)
-					i.cmd.optionsFromFlags(c, ctx)
 
 					return i.s3(ctx, i.cmd.deploymentFromFlags(c), keys)
 				},
@@ -115,7 +120,7 @@ func (i *Invoker) AddInvokeCommand() *cli.Command {
 					}
 
 					ctx := falco.NewContext(jobname)
-					readCommonFlags(c, ctx)
+					i.addFlags(c, ctx)
 					ctx.NewStingOption("inputBucket", bucket)
 					i.cmd.optionsFromFlags(c, ctx)
 
