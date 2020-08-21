@@ -59,7 +59,7 @@ func OWCommandSetup(commands []*cli.Command, platfrom *platforms.OpenWhisk, runt
 			},
 			//TODO: fix queueConnection..
 			"dist": &executors.DistributedExecutor{
-				Queue:        executors.RabbitMQWrapper{},
+				Queue:        &executors.RabbitMQWrapper{},
 				Timeout:      0,
 				TestInterval: 200,
 				Strategy: executors.MeanBackoffStragglerStrategy{

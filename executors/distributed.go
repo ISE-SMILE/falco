@@ -365,7 +365,7 @@ func FromDelivery(d amqp.Delivery) *rabbidmqMessage {
 // rmqpass - password of rabidmq user (default guest)
 // rmq - address (ip or hostname) for rabidmq (default localhost)
 // rmqport - port for rabidmq (default 5672)
-func (r RabbitMQWrapper) Setup(c *falco.Context) error {
+func (r *RabbitMQWrapper) Setup(c *falco.Context) error {
 	rmqURL := fmt.Sprintf("amqp://%s:%s@%s:%d/",
 		url.QueryEscape(c.String("rmquser", "guest")),
 		url.QueryEscape(c.String("rmqpass", "guest")),
@@ -382,7 +382,7 @@ func (r RabbitMQWrapper) Setup(c *falco.Context) error {
 	return nil
 }
 
-func (r RabbitMQWrapper) Connect() error {
+func (r *RabbitMQWrapper) Connect() error {
 	ch, err := r.QueueConnection.Channel()
 
 	if err != nil {
@@ -393,17 +393,17 @@ func (r RabbitMQWrapper) Connect() error {
 	return nil
 }
 
-func (r RabbitMQWrapper) Close() error {
+func (r *RabbitMQWrapper) Close() error {
 	_ = r.Channel.Close()
 	return r.QueueConnection.Close()
 }
 
-func (r RabbitMQWrapper) Delete(name string) error {
+func (r *RabbitMQWrapper) Delete(name string) error {
 	_, err := r.Channel.QueueDelete(name, true, true, true)
 	return err
 }
 
-func (r RabbitMQWrapper) Open(name string) error {
+func (r *RabbitMQWrapper) Open(name string) error {
 	if !r.QueueConnection.IsClosed() {
 		if _, ok := r.Queues[name]; !ok {
 			queue, err := r.Channel.QueueDeclare(name, false, false, false, false, nil)
@@ -420,7 +420,7 @@ func (r RabbitMQWrapper) Open(name string) error {
 	}
 }
 
-func (r RabbitMQWrapper) Purge(name string) error {
+func (r *RabbitMQWrapper) Purge(name string) error {
 	if !r.QueueConnection.IsClosed() {
 		_, err := r.Channel.QueuePurge(name, true)
 		return err
@@ -429,7 +429,7 @@ func (r RabbitMQWrapper) Purge(name string) error {
 	}
 }
 
-func (r RabbitMQWrapper) Consume(name string) (<-chan DEQueueMessage, error) {
+func (r *RabbitMQWrapper) Consume(name string) (<-chan DEQueueMessage, error) {
 	out := make(chan DEQueueMessage)
 	messages, err := r.Channel.Consume(
 		name,  // queue
