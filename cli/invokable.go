@@ -43,7 +43,7 @@ type Invoker struct {
 func (i *Invoker) addFlags(c *cli.Context, ctx *falco.Context) {
 	readCommonFlags(c, ctx)
 	ctx.NewIntOption("grouping", c.Int("grouping"))
-	ctx.NewStingOption("grouping", c.String("result"))
+	ctx.NewStingOption("result", c.String("result"))
 	i.cmd.optionsFromFlags(c, ctx)
 }
 
