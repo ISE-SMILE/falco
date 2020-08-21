@@ -116,6 +116,8 @@ func (s *Submitter) AddSubmitCommand() *cli.Command {
 
 				job := falco.NewJob(context.Background(), payload, c.Int("rps"), NewConsoleMonitor())
 
+				job.Deployment = s.cmd.deploymentFromFlags(c)
+
 				if err != nil {
 					return err
 				}
