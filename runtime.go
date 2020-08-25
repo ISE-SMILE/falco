@@ -39,7 +39,7 @@ type InvocationStrategy interface {
 	//short discription used in ui elementes and logging
 	StrategyUsage() string
 	//this method should generate the invocation payload that
-	InvocationPayload(context *Context, workdir string, files ...string) ([]InvocationPayload, error)
+	InvocationPayload(runtime *Runtime, context *Context, workdir string, files ...string) ([]InvocationPayload, error)
 }
 
 type Runtime interface {
