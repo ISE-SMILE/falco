@@ -299,7 +299,7 @@ func (ow *OpenWhisk) Submit(job *falco.Job, payload falco.InvocationPayload,
 		if id, ok := inv["activationId"]; ok {
 			job.Info(fmt.Sprintf("%s\n", id))
 		} else {
-			job.Info(fmt.Sprintf("[%d] %s\n", resp.StatusCode, payload.ID))
+			job.Info(fmt.Sprintf("[%d] %s\n", resp.StatusCode, payload.ID()))
 		}
 	}
 	inv["fid"] = payload.ID()

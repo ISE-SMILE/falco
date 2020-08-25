@@ -111,8 +111,7 @@ func (s *Submitter) AddSubmitCommand() *cli.Command {
 				}()
 
 				ctx.NewStingOption("inputBucket", bucket)
-
-				payload, err := s.runtime.InvocationPayload(ctx, keys...)
+				payload, err := s.runtime.InvocationPayload(ctx, bucket, keys...)
 
 				job := falco.NewJob(context.Background(), payload, c.Int("rps"), NewConsoleMonitor())
 

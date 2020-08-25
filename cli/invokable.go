@@ -48,10 +48,60 @@ func (i *Invoker) addFlags(c *cli.Context, ctx *falco.Context) {
 }
 
 func (i *Invoker) AddInvokeCommand() *cli.Command {
+
+	cmds := make([]*cli.Command, 0)
+	for _, s := range i.runtime.InvocationStrategies() {
+		cmd := &cli.Command{
+			Name:      s.StrategyName(),
+			Usage:     s.StrategyUsage(),
+			ArgsUsage: "[jobname] [bucket] [jobfile]",
+			Action: func(c *cli.Context) error {
+				jobname := c.Args().Get(0)
+				bucket := c.Args().Get(1)
+				jobfile := c.Args().Get(2)
+				keys, err := readJobsFile(jobfile)
+
+				if err != nil {
+					return err
+				}
+
+				ctx := falco.NewContext(jobname)
+				i.addFlags(c, ctx)
+				ctx.NewStingOption("inputBucket", bucket)
+
+				payloads, err := s.InvocationPayload(ctx, bucket, keys...)
+				if err != nil {
+					return err
+				}
+
+				collector := falco.NewCollector()
+
+				errors := make([]error, 0)
+				deployment := i.cmd.deploymentFromFlags(c)
+				for _, payload := range payloads {
+					err = i.platform.Invoke(deployment, payload, collector)
+					if err != nil {
+						fmt.Printf("%s failed with %+v\n", payload.ID(), err)
+						errors = append(errors, err)
+					}
+				}
+
+				collector.Print()
+
+				if len(errors) > 0 {
+					return fmt.Errorf("invocation failed with:%+v", errors)
+				}
+
+				return nil
+			},
+		}
+		cmds = append(cmds, cmd)
+	}
+
 	return &cli.Command{
 		Name:    "invoke",
 		Aliases: []string{"i"},
-		Usage:   "sends an invocation to a AmaDA container",
+		Usage:   "sends an invocation to the deployed runtime",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     "result",
@@ -66,107 +116,6 @@ func (i *Invoker) AddInvokeCommand() *cli.Command {
 				Value:    1,
 			},
 		},
-		Subcommands: []*cli.Command{
-			{
-				Name:      "file",
-				Aliases:   []string{"f"},
-				Usage:     "sends a single file-based invocation",
-				ArgsUsage: "[jobname] [input file]",
-				Action: func(c *cli.Context) error {
-					jobname := c.Args().Get(0)
-					input := c.Args().Get(1)
-
-					ctx := falco.NewContext(jobname)
-					i.addFlags(c, ctx)
-
-					return i.file(ctx, i.cmd.deploymentFromFlags(c), input)
-				},
-			},
-			{
-				Name:      "s3",
-				Aliases:   []string{"s"},
-				Usage:     "sends a S3-URLs as invocation",
-				ArgsUsage: "[jobname] [Input Bucket key] [jobfile]",
-				Action: func(c *cli.Context) error {
-					jobname := c.Args().Get(0)
-					bucket := c.Args().Get(1)
-					jobfile := c.Args().Get(2)
-					keys, err := readJobsFile(jobfile)
-
-					if err != nil {
-						return err
-					}
-
-					ctx := falco.NewContext(jobname)
-					i.addFlags(c, ctx)
-					ctx.NewStingOption("inputBucket", bucket)
-
-					return i.s3(ctx, i.cmd.deploymentFromFlags(c), keys)
-				},
-			},
-			{
-				Name:      "s3d",
-				Aliases:   []string{"d"},
-				Usage:     "sends a S3 URLs as invocation",
-				ArgsUsage: "[jobname] [bucketName] [jobfile])",
-				Action: func(c *cli.Context) error {
-					jobname := c.Args().Get(0)
-					bucket := c.Args().Get(1)
-					jobfile := c.Args().Get(2)
-					keys, err := readJobsFile(jobfile)
-
-					if err != nil {
-						return err
-					}
-
-					ctx := falco.NewContext(jobname)
-					i.addFlags(c, ctx)
-					ctx.NewStingOption("inputBucket", bucket)
-					i.cmd.optionsFromFlags(c, ctx)
-
-					return i.s3d(ctx, i.cmd.deploymentFromFlags(c), keys)
-				},
-			},
-		},
+		Subcommands: cmds,
 	}
-}
-
-func (i *Invoker) invoke(mode int, ctx *falco.Context, deployment falco.Deployment, keys ...string) error {
-
-	ctx.NewIntOption("mode", mode)
-	payloads, err := i.runtime.InvocationPayload(ctx, keys...)
-	if err != nil {
-		return err
-	}
-
-	collector := falco.NewCollector()
-
-	errors := make([]error, 0)
-	for _, payload := range payloads {
-		err = i.platform.Invoke(deployment, payload, collector)
-		if err != nil {
-			fmt.Printf("%s failed with %+v\n", payload.ID(), err)
-			errors = append(errors, err)
-		}
-	}
-
-	collector.Print()
-
-	if len(errors) > 0 {
-		return fmt.Errorf("invocation failed with:%+v", errors)
-	}
-
-	return nil
-}
-
-func (i *Invoker) s3(ctx *falco.Context, deployment falco.Deployment, keys []string) error {
-	return i.invoke(1, ctx, deployment, keys...)
-}
-
-func (i *Invoker) s3d(ctx *falco.Context, deployment falco.Deployment, keys []string) error {
-	return i.invoke(2, ctx, deployment, keys...)
-}
-
-func (i *Invoker) file(ctx *falco.Context, deployment falco.Deployment, input string) error {
-	return i.invoke(0, ctx, deployment, input)
 }

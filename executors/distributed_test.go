@@ -36,7 +36,7 @@ import (
 type NoOpStrategy struct {
 }
 
-func (n *NoOpStrategy) SelectStranglers(job *falco.Job, p DistributedExecutor) ([]falco.InvocationPayload, []falco.InvocationPayload, int) {
+func (n *NoOpStrategy) SelectStranglers(job *falco.Job, p *DistributedExecutor) ([]falco.InvocationPayload, []falco.InvocationPayload, int) {
 	stranglers := make([]falco.InvocationPayload, 0)
 	failures := make([]falco.InvocationPayload, 0)
 	completed := 0
@@ -46,7 +46,6 @@ func (n *NoOpStrategy) SelectStranglers(job *falco.Job, p DistributedExecutor) (
 		}
 	}
 	return stranglers, failures, completed
-
 }
 
 func TestDistributedExecutor_NoResubmitt(t *testing.T) {
