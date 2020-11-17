@@ -118,8 +118,52 @@ type MockQueue struct {
 	metics chan MockMessage
 }
 
+func (m *MockQueue) Start(jobname string) error {
+	return nil
+}
+
+func (m *MockQueue) Observe() (<-chan DEQueueMessage, error) {
+	out := make(chan DEQueueMessage)
+	go func() {
+		for {
+			select {
+			case m := <-m.metics:
+				out <- m
+			}
+		}
+	}()
+	return out, nil
+}
+
+func (m *MockQueue) ConsumeMetrics() (<-chan DEQueueMessage, error) {
+	out := make(chan DEQueueMessage)
+	go func() {
+		for {
+			select {
+			case m := <-m.metics:
+				out <- m
+			}
+		}
+	}()
+	return out, nil
+}
+
 type MockMessage struct {
-	body []byte
+	id     string
+	status falco.InvocationStatus
+	body   []byte
+}
+
+func (m MockMessage) PayloadID() string {
+	return m.id
+}
+
+func (m MockMessage) Status() falco.InvocationStatus {
+	return m.status
+}
+
+func (m MockMessage) Telemetry() []byte {
+	return m.body
 }
 
 func (m MockMessage) Body() []byte {
@@ -131,9 +175,16 @@ func FromMeasurement(measurement falco.Measurement) MockMessage {
 	if err != nil {
 		panic(err)
 	}
-
+	var status falco.InvocationStatus
+	if measurement.IsFailure() {
+		status = falco.Failure
+	} else {
+		status = falco.Success
+	}
 	return MockMessage{
-		body: data,
+		id:     measurement.InvocationID(),
+		status: status,
+		body:   data,
 	}
 }
 
@@ -144,12 +195,8 @@ func (m *MockQueue) Add(jobName string, measurement falco.Measurement) {
 }
 
 func (m *MockQueue) Setup(c *falco.Context) error {
-
-	m.Open("any")
-	return nil
-}
-
-func (m *MockQueue) Connect() error {
+	m.metics = make(chan MockMessage)
+	m.acks = make(chan MockMessage)
 	return nil
 }
 
@@ -157,23 +204,7 @@ func (m *MockQueue) Close() error {
 	return nil
 }
 
-func (m *MockQueue) Open(s string) error {
-	m.metics = make(chan MockMessage)
-	m.acks = make(chan MockMessage)
-	return nil
-}
-
-func (m *MockQueue) Purge(s string) error {
-	m.Open(s)
-	return nil
-}
-
-func (m *MockQueue) Delete(s string) error {
-	m.Open("any")
-	return nil
-}
-
-func (m *MockQueue) Consume(s string) (<-chan DEQueueMessage, error) {
+func (m *MockQueue) consume(s string) (<-chan DEQueueMessage, error) {
 	out := make(chan DEQueueMessage)
 
 	var queue chan MockMessage

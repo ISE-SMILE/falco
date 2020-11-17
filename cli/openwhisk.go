@@ -58,8 +58,18 @@ func OWCommandSetup(commands []*cli.Command, platfrom *platforms.OpenWhisk, runt
 				Threads: golang.NumCPU(),
 			},
 			//TODO: fix queueConnection..
-			"dist": &executors.DistributedExecutor{
+			"rdist": &executors.DistributedExecutor{
 				Queue:        &executors.RabbitMQWrapper{},
+				Timeout:      0,
+				TestInterval: 200,
+				Strategy: executors.MeanBackoffStragglerStrategy{
+					ReTryThreshold:    3,
+					MinimumSampleSize: &samplesize,
+					Graceperiod:       time.Millisecond * 100,
+				},
+			},
+			"tdist": &executors.DistributedExecutor{
+				Queue:        &executors.TCPDriverChannel{},
 				Timeout:      0,
 				TestInterval: 200,
 				Strategy: executors.MeanBackoffStragglerStrategy{

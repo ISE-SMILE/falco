@@ -106,6 +106,14 @@ type MockInvocation struct {
 	SuccessSelector func(invocation *MockInvocation) bool
 }
 
+func (m *MockInvocation) Status() InvocationStatus {
+	if m.ERR != nil {
+		return Failure
+	} else {
+		return Success
+	}
+}
+
 func (m *MockInvocation) MarkAsResubmitted() {
 	//NO-OP
 }

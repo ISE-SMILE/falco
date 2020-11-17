@@ -28,6 +28,16 @@ import (
 	"time"
 )
 
+type InvocationStatus int
+
+const (
+	Success InvocationStatus = iota
+	Failure
+	RuntimeError
+	PlatformError
+	MemoryError
+)
+
 type InvocationPayload interface {
 	//uniuqe task IID (can be used to assosiate returned invocations to submitted invocations)
 	ID() string
@@ -35,6 +45,8 @@ type InvocationPayload interface {
 	SubmittedAt() time.Time
 	//the latancy between the sumitted time and the time Done was called
 	Latancy() time.Duration
+
+	Status() InvocationStatus
 
 	//if this payload is processed, e.g. we know it failed, or we have a result
 	IsCompleted() bool

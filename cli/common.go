@@ -29,6 +29,7 @@ import (
 	"github.com/ISE-SMILE/falco"
 	"github.com/urfave/cli/v2"
 	"io"
+	"net"
 	"os"
 )
 
@@ -37,8 +38,43 @@ func SetupCommonFlags() []cli.Flag {
 
 	flags = append(flags, s3Flags()...)
 	flags = append(flags, rmqFlags()...)
+	flags = append(flags, tcpFlags()...)
 	return flags
 
+}
+
+// GetLocalIP returns the non loopback local IP of the host
+func GetLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, address := range addrs {
+		// check the address type and if it is not a loopback the display it
+		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+	return ""
+}
+func tcpFlags() []cli.Flag {
+	ip := GetLocalIP()
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:     "driver",
+			Usage:    "driver IP Address",
+			Required: false,
+			Value:    ip,
+		},
+		&cli.IntFlag{
+			Name:     "driverPort",
+			Usage:    "RabbitMQ Port",
+			Required: false,
+			Value:    8888,
+		},
+	}
 }
 
 func rmqFlags() []cli.Flag {

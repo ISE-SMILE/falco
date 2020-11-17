@@ -28,11 +28,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ISE-SMILE/falco"
-	"github.com/streadway/amqp"
-	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"time"
 )
 
@@ -41,17 +38,26 @@ type StragglerStrategy interface {
 }
 
 type DEQueueMessage interface {
-	Body() []byte
+	//returns payloadID refernece for this message
+	PayloadID() string
+	//returns the status of a invocation
+	Status() falco.InvocationStatus
+
+	Telemetry() []byte
 }
 
 type DEQueue interface {
+	//called before any execution strategy, can be used to setup connections, check configurations
 	Setup(*falco.Context) error
-	Connect() error
+
+	//enables the channel, after this call messages send from the runtime shuld be recived and processed
+	Start(jobname string) error
+	//cleans up connections and closes all conumers
 	Close() error
-	Open(string) error
-	Purge(string) error
-	Delete(string) error
-	Consume(string) (<-chan DEQueueMessage, error)
+	//this call is used to observe updates on the job, without any telemetry
+	Observe() (<-chan DEQueueMessage, error)
+	//this call is used to observe updates on a job including telemetry data
+	ConsumeMetrics() (<-chan DEQueueMessage, error)
 }
 
 type DeadlineStragglerStrategy struct {
@@ -139,30 +145,12 @@ type DistributedExecutor struct {
 
 func (p *DistributedExecutor) Execute(job *falco.Job, submittable falco.Submittable, writer falco.ResultCollector) error {
 
-	err := p.Queue.Connect()
+	err := p.Queue.Start(job.Name())
 	if err != nil {
 		return err
 	}
 
 	defer p.Queue.Close()
-
-	//create the rabbitmq queues
-	//create control-plane
-	controlQueueName := job.Name()
-	err = p.Queue.Open(controlQueueName)
-	if err != nil {
-		return err
-	}
-	//create metrics-plane
-	metricsQueueName := fmt.Sprintf("%s-metrics", job.Name())
-	err = p.Queue.Open(metricsQueueName)
-	if err != nil {
-		return err
-	}
-
-	//remove content of privious runs?
-	_ = p.Queue.Purge(controlQueueName)
-	_ = p.Queue.Purge(metricsQueueName)
 
 	//register an interrupt handler so we don't loose data ;)
 	signalChan := make(chan os.Signal, 1)
@@ -182,16 +170,14 @@ func (p *DistributedExecutor) Execute(job *falco.Job, submittable falco.Submitta
 		}
 	}()
 
-	//submitt setup end
-
 	//collect start
 
 	go func() {
 		collectMetrics := writer != nil
 		if collectMetrics {
-			err = p.collectMetrics(job, metricsQueueName, writer)
+			err = p.collectMetrics(job, writer)
 		} else {
-			err = p.collectStage(job, controlQueueName, writer)
+			err = p.collectStage(job, writer)
 		}
 
 		if err != nil {
@@ -217,18 +203,14 @@ func (p *DistributedExecutor) Execute(job *falco.Job, submittable falco.Submitta
 	} else {
 		job.Wait()
 	}
-	//cleanup
-	_ = p.Queue.Delete(controlQueueName)
-	_ = p.Queue.Delete(metricsQueueName)
 
 	job.PrintStats()
 
 	return err
 }
 
-func (p *DistributedExecutor) collectMetrics(job *falco.Job, queueName string,
-	writer falco.ResultCollector) error {
-	metrics, err := p.Queue.Consume(queueName)
+func (p *DistributedExecutor) collectMetrics(job *falco.Job, writer falco.ResultCollector) error {
+	metrics, err := p.Queue.ConsumeMetrics()
 
 	if err != nil {
 		return err
@@ -238,12 +220,12 @@ func (p *DistributedExecutor) collectMetrics(job *falco.Job, queueName string,
 		select {
 		case m := <-metrics:
 			var data falco.Measurement
-			err = json.Unmarshal(m.Body(), &data)
+			err = json.Unmarshal(m.Telemetry(), &data)
 
 			if data != nil {
 				//TODO:!
 				//data.withDefaults()
-				payloadID := data.InvocationID()
+				payloadID := m.PayloadID()
 				job.Done(payloadID)
 				if payload, err := job.PayloadFromId(payloadID); err == nil {
 					if !payload.IsCompleted() {
@@ -267,9 +249,8 @@ func (p *DistributedExecutor) collectMetrics(job *falco.Job, queueName string,
 
 }
 
-func (p *DistributedExecutor) collectStage(job *falco.Job, queueName string,
-	writer falco.ResultCollector) error {
-	acks, err := p.Queue.Consume(queueName)
+func (p *DistributedExecutor) collectStage(job *falco.Job, writer falco.ResultCollector) error {
+	acks, err := p.Queue.Observe()
 
 	if err != nil {
 		return err
@@ -278,18 +259,14 @@ func (p *DistributedExecutor) collectStage(job *falco.Job, queueName string,
 	for i := 0; i < len(job.Tasks); i++ {
 		select {
 		case x := <-acks:
-			msg := string(x.Body())
-			parts := strings.Split(msg, ",")
-			ids := parts[0]
-			state := parts[1] == "0"
-			if payload, err := job.PayloadFromId(ids); err == nil {
+			if payload, err := job.PayloadFromId(x.PayloadID()); err == nil {
 				payload.Done()
-				if state {
+				if x.Status() != falco.Success {
 					payload.SetError(fmt.Errorf("runtime error"))
 				}
 			}
 
-			job.Done(ids)
+			job.Done(x.PayloadID())
 		case <-job.Canceled():
 			fmt.Println("job got canceled")
 		}
@@ -338,120 +315,4 @@ func (p *DistributedExecutor) observeJobs(job *falco.Job, cmd falco.Submittable,
 
 func (p *DistributedExecutor) selectStranglers(job *falco.Job) ([]falco.InvocationPayload, []falco.InvocationPayload, int) {
 	return p.Strategy.SelectStranglers(job, p)
-}
-
-//RabbitMQWrapper
-
-type RabbitMQWrapper struct {
-	QueueConnection *amqp.Connection
-	Channel         *amqp.Channel
-	Queues          map[string]amqp.Queue
-}
-
-type rabbidmqMessage struct {
-	d amqp.Delivery
-}
-
-func (r rabbidmqMessage) Body() []byte {
-	return r.d.Body
-}
-
-func FromDelivery(d amqp.Delivery) *rabbidmqMessage {
-	return &rabbidmqMessage{d}
-}
-
-//Setup the following values must be set in the context:
-// rmquser - username of rabidmq (default guest)
-// rmqpass - password of rabidmq user (default guest)
-// rmq - address (ip or hostname) for rabidmq (default localhost)
-// rmqport - port for rabidmq (default 5672)
-func (r *RabbitMQWrapper) Setup(c *falco.Context) error {
-	rmqURL := fmt.Sprintf("amqp://%s:%s@%s:%d/",
-		url.QueryEscape(c.String("rmquser", "guest")),
-		url.QueryEscape(c.String("rmqpass", "guest")),
-		c.String("rmq", "localhost"),
-		c.Int("rmqport", 5672),
-	)
-
-	conn, err := amqp.Dial(rmqURL)
-	if err != nil {
-		return err
-	}
-	r.QueueConnection = conn
-
-	return nil
-}
-
-func (r *RabbitMQWrapper) Connect() error {
-	ch, err := r.QueueConnection.Channel()
-
-	if err != nil {
-		return err
-	}
-
-	r.Channel = ch
-	return nil
-}
-
-func (r *RabbitMQWrapper) Close() error {
-	_ = r.Channel.Close()
-	return r.QueueConnection.Close()
-}
-
-func (r *RabbitMQWrapper) Delete(name string) error {
-	_, err := r.Channel.QueueDelete(name, true, true, true)
-	return err
-}
-
-func (r *RabbitMQWrapper) Open(name string) error {
-	if !r.QueueConnection.IsClosed() {
-		if _, ok := r.Queues[name]; !ok {
-			queue, err := r.Channel.QueueDeclare(name, false, false, false, false, nil)
-			if err != nil {
-				return err
-			}
-
-			r.Queues[name] = queue
-		}
-
-		return nil
-	} else {
-		return fmt.Errorf("queue connection is closed")
-	}
-}
-
-func (r *RabbitMQWrapper) Purge(name string) error {
-	if !r.QueueConnection.IsClosed() {
-		_, err := r.Channel.QueuePurge(name, true)
-		return err
-	} else {
-		return fmt.Errorf("queue connection is closed")
-	}
-}
-
-func (r *RabbitMQWrapper) Consume(name string) (<-chan DEQueueMessage, error) {
-	out := make(chan DEQueueMessage)
-	messages, err := r.Channel.Consume(
-		name,  // queue
-		"",    // consumer
-		true,  // auto-ack
-		false, // exclusive
-		false, // no-local
-		false, // no-wait
-		nil,   // args
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	go func() {
-		for {
-			select {
-			case d := <-messages:
-				out <- FromDelivery(d)
-			}
-		}
-	}()
-
-	return out, nil
 }

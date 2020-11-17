@@ -124,7 +124,7 @@ func DockerCommandSetup(commands []*cli.Command,
 			},
 			{
 				Name:    "init",
-				Aliases: []string{"i"},
+				Aliases: []string{"in"},
 				Usage:   "init a new runtime",
 				Flags: []cli.Flag{
 					&cli.BoolFlag{

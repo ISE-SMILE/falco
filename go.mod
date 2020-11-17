@@ -11,6 +11,7 @@ require (
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/fatih/color v1.9.0 // indirect
+	github.com/golang/protobuf v1.4.2
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/hokaccha/go-prettyjson v0.0.0-20190818114111-108c894c2c0e // indirect
 	github.com/nicksnyder/go-i18n v1.10.1 // indirect
@@ -26,4 +27,5 @@ require (
 	go.uber.org/ratelimit v0.1.0
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e // indirect
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
+	google.golang.org/protobuf v1.25.0 // indirect
 )
