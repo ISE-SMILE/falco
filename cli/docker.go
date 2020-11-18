@@ -34,7 +34,7 @@ type DockerCommand struct {
 	runner *platforms.OpenWhiskDockerRunner
 }
 
-func (d *DockerCommand) optionsFromFlags(c *cli.Context, ctx *falco.Context) {
+func (d *DockerCommand) optionsFromFlags(c *cli.Context, ctx *falco.Options) {
 	ctx.NewStingOption("host", c.String("host"))
 	ctx.NewIntOption("port", c.Int("port"))
 }
@@ -103,7 +103,7 @@ func DockerCommandSetup(commands []*cli.Command,
 
 					files := c.Args().Slice()[1:]
 
-					ctx := falco.NewContext(jobname)
+					ctx := falco.NewFacloOptions(jobname)
 
 					readCommonFlags(c, ctx)
 					cmd.optionsFromFlags(c, ctx)

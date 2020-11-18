@@ -26,11 +26,9 @@ package falco
 /*
  Interface for Async Submission of Workloads
 */
-type Submittable interface {
+type AsyncPlatform interface {
 	Platform
-	Invokable
-	//Submit a job asynchronously - must be collected using Collect
-	//TODO push <-chan map[string]interface{} into job..
-	Submit(*Job, InvocationPayload, chan<- map[string]interface{}, ...InvocableOptions) error
-	Collect(*Job, <-chan map[string]interface{}, ResultCollector, ...InvocableOptions) error
+
+	Submit(*AsyncObserver, Invocation, chan<- Invocation, ...InvocableOptions) error
+	Collect(*AsyncObserver, <-chan Invocation, ...InvocableOptions) error
 }

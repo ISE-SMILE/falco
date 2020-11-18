@@ -115,7 +115,7 @@ func OWCommandSetup(commands []*cli.Command, platfrom *platforms.OpenWhisk, runt
 					jobname := c.Args().Get(0)
 					files := c.Args().Slice()[1:]
 
-					ctx := falco.NewContext(jobname)
+					ctx := falco.NewFacloOptions(jobname)
 
 					readCommonFlags(c, ctx)
 
@@ -168,6 +168,6 @@ func (*OWCommand) deploymentFromFlags(c *cli.Context) falco.Deployment {
 	return dep
 }
 
-func (ow *OWCommand) optionsFromFlags(c *cli.Context, ctx *falco.Context) {
+func (ow *OWCommand) optionsFromFlags(c *cli.Context, ctx *falco.Options) {
 	//TODO??
 }

@@ -39,11 +39,11 @@ type SubmittableCommand interface {
 type Submitter struct {
 	Invoker
 	cmd        SubmittableCommand
-	submitter  falco.Submittable
+	submitter  falco.AsyncPlatform
 	strategies map[string]falco.ExecutionStrategy
 }
 
-func (s *Submitter) invokeStrategy(job *falco.Job, strategy falco.ExecutionStrategy, collector falco.ResultCollector) error {
+func (s *Submitter) invokeStrategy(job *falco.AsyncObserver, strategy falco.ExecutionStrategy, collector falco.ResultCollector) error {
 	err := strategy.Execute(job, s.submitter, collector)
 
 	if err != nil {
@@ -66,7 +66,7 @@ func (s *Submitter) AddSubmitCommand() *cli.Command {
 				bucket := c.Args().Get(1)
 				jobfile := c.Args().Get(2)
 
-				ctx := falco.NewContext(jobname)
+				ctx := falco.NewFacloOptions(jobname)
 
 				keys, err := readJobsFile(jobfile)
 				if err != nil {

@@ -75,7 +75,7 @@ func (o OpenWhiskDockerRunner) Deploy(deployable falco.Deployable) (falco.Deploy
 
 	containerReq, err := o.cli.ContainerCreate(o.ctx,
 		&container.Config{
-			Image:        deployable.Runtime(),
+			Image:        deployable.Runtime().Identifier(),
 			ExposedPorts: nat.PortSet{"8080": struct{}{}},
 		},
 		&container.HostConfig{
@@ -106,7 +106,7 @@ func (o OpenWhiskDockerRunner) Deploy(deployable falco.Deployable) (falco.Deploy
 		"__OW_ACTION_NAME":   containerName,
 		"__OW_ACTIVATION_ID": deployment.activationID,
 	}
-	deploymentContext := deployable.Context()
+	deploymentContext := deployable.Option()
 
 	for k, v := range deploymentContext.PrefixMap("env") {
 		envMap[k] = v
@@ -116,7 +116,7 @@ func (o OpenWhiskDockerRunner) Deploy(deployable falco.Deployable) (falco.Deploy
 		Value: InitMessage{
 			Name:   deployment.ID(),
 			Main:   "none",
-			Code:   deployable.Payload(),
+			Code:   deployable.Payload().(string),
 			Binary: false,
 			Env:    envMap,
 		},
@@ -164,7 +164,7 @@ func (o OpenWhiskDockerRunner) Scale(deployment falco.Deployment, options ...fal
 	return deployment, nil
 }
 
-func (o OpenWhiskDockerRunner) Invoke(deployment falco.Deployment, payload falco.InvocationPayload, collector falco.ResultCollector) error {
+func (o OpenWhiskDockerRunner) Invoke(deployment falco.Deployment, payload falco.Invocation) (falco.Invocation, error) {
 	dockerDeployment := deployment.(DockerDeployment)
 	msg := RunMessage{
 		Input:         payload,
@@ -177,37 +177,41 @@ func (o OpenWhiskDockerRunner) Invoke(deployment falco.Deployment, payload falco
 
 	requestBody, err := json.Marshal(msg)
 	if err != nil {
-		return err
+		payload.SetError(err)
+		return payload, err
 	}
 
 	start := time.Now()
 	resp, err := http.Post("http://127.0.0.1:8080", "application/json", bytes.NewReader(requestBody))
 	elapsed := time.Since(start)
+	payload.Done(&elapsed)
 
 	if err != nil {
-		return err
+		payload.SetError(err)
+		return payload, err
 	}
 
-	data, err := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode == 200 {
+		data, err := ioutil.ReadAll(resp.Body)
 
-	if err != nil {
-		return err
-	}
+		if err != nil {
+			payload.SetError(err)
+			return payload, err
+		}
 
-	if resp.StatusCode == 200 && collector != nil {
-		measurements := make(falco.Measurement)
+		measurements := make(map[string]interface{})
 		err = json.Unmarshal(data, &measurements)
 
 		if err != nil {
-			return nil
+			payload.SetError(err)
+			return payload, err
 		}
-
-		payload.Runtime().MakeMeasurement(measurements)
-
-		measurements.SetJobID(deployment.ID())
-
-		writeMeasurement(measurements, payload.ID(), elapsed, collector)
+		payload.SetResult(measurements)
+		return payload, nil
+	} else {
+		err = fmt.Errorf("invocation error [%d] %s - check the platfrom logs", resp.StatusCode, resp.Status)
+		payload.SetError(err)
+		return payload, err
 	}
 
-	return nil
 }

@@ -23,24 +23,11 @@
 
 package falco
 
-import (
-	"time"
-)
-
-
-
-type Measurable interface {
-	//XXX: these I don't like
-	MakeFailure(id,cause string,start time.Time) Measurement
-	MakeMeasurement(map[string]interface{}) Measurement
-}
-
 type Runtime interface {
+	Identifier() string
 	//compile a set of given files to a deployment package that can be deployed to any platfrom
-	MakeDeployment(*Context, ...string) (Deployable,error)
+	MakeDeployment(*Options, ...string) (Deployable, error)
 
-	//combine a set of input files to an invocation payload
-	InvocationPayload(*Context,...string) ([]InvocationPayload,error)
-
-	Measurable
+	//combine a set of input files to an invocation payload for a given runtime, an example would be a node-js file and all its dependeis into a zip for a nodeJS runtime.
+	InvocationPayload(*Options, ...string) ([]Invocation, error)
 }

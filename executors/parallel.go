@@ -32,15 +32,15 @@ type ParallelExecutor struct {
 	Threads int
 }
 
-func (o ParallelExecutor) Execute(job *falco.Job, submittable falco.Submittable, collector falco.ResultCollector) error {
-	queue := make(chan falco.InvocationPayload, len(job.Tasks))
+func (o ParallelExecutor) Execute(job *falco.AsyncObserver, submittable falco.AsyncPlatform) error {
+	queue := make(chan falco.Invocation, len(job.Payloads))
 
 	results := make(chan error)
 
-	worker := func(queue chan falco.InvocationPayload, returns chan error) {
+	worker := func(queue chan falco.Invocation, returns chan error) {
 		var counter = 0
 		for payload := range queue {
-			err := submittable.Invoke(job.Deployment, payload, collector)
+			_, err := submittable.Invoke(job.Deployment, payload)
 
 			counter += 1
 			returns <- err
@@ -48,7 +48,7 @@ func (o ParallelExecutor) Execute(job *falco.Job, submittable falco.Submittable,
 		fmt.Printf("processed requests %d \n", counter)
 	}
 
-	for _, p := range job.Tasks {
+	for _, p := range job.Payloads {
 		queue <- p
 	}
 
@@ -56,7 +56,7 @@ func (o ParallelExecutor) Execute(job *falco.Job, submittable falco.Submittable,
 		go worker(queue, results)
 	}
 	close(queue)
-	for i := 0; i < len(job.Tasks); i++ {
+	for i := 0; i < len(job.Payloads); i++ {
 		<-results
 	}
 	return nil

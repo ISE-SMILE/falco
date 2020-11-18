@@ -42,16 +42,17 @@ type ProgressMonitor interface {
 	Info(string)
 }
 
-type Job struct {
+type AsyncObserver struct {
 	ctx context.Context
 
-	Context Context
+	Options Options
 	//
 	Deployment Deployment
+
 	//submissions
-	submitted map[string]InvocationPayload
-	completed map[string]InvocationPayload
-	Tasks     []InvocationPayload
+	submitted map[string]Invocation
+	completed map[string]Invocation
+	Payloads  []Invocation
 
 	//rate-limiting
 	query ratelimit.Limiter
@@ -67,17 +68,17 @@ type Job struct {
 	monitor ProgressMonitor
 }
 
-func NewJob(ctx context.Context, tasks []InvocationPayload,
-	requestsPerSeconds int, monitor ProgressMonitor) *Job {
+func NewJob(ctx context.Context, tasks []Invocation,
+	requestsPerSeconds int, monitor ProgressMonitor) *AsyncObserver {
 	jobCtx, cancel := context.WithCancel(ctx)
-	job := &Job{
+	job := &AsyncObserver{
 		ctx:       jobCtx,
 		spawn:     rate.NewLimiter(rate.Every(time.Minute/time.Duration(requestsPerSeconds)), 10),
 		query:     ratelimit.New(requestsPerSeconds),
 		monitor:   monitor,
-		Tasks:     tasks,
-		submitted: make(map[string]InvocationPayload),
-		completed: make(map[string]InvocationPayload),
+		Payloads:  tasks,
+		submitted: make(map[string]Invocation),
+		completed: make(map[string]Invocation),
 		cancel:    cancel,
 	}
 	if job.monitor != nil {
@@ -87,11 +88,11 @@ func NewJob(ctx context.Context, tasks []InvocationPayload,
 	return job
 }
 
-func (j *Job) Name() string {
-	return j.Context.Name()
+func (j *AsyncObserver) Name() string {
+	return j.Options.Name()
 }
 
-func (j *Job) Done(payloadID string) {
+func (j *AsyncObserver) Done(payloadID string) {
 
 	if j.submissions.Load() > 0 {
 		j.wg.Done()
@@ -101,7 +102,7 @@ func (j *Job) Done(payloadID string) {
 		j.monitor.Advance(1)
 	}
 
-	if payload, err := j.PayloadFromId(payloadID); err == nil {
+	if payload, err := j.SubmittedPayloadFromId(payloadID); err == nil {
 		if _, ok := j.completed[payloadID]; ok {
 			//we have an already done job, we ignore it.
 			fmt.Printf("recived a task that was already complet %s\n", payloadID)
@@ -118,7 +119,7 @@ func (j *Job) Done(payloadID string) {
 	j.submissions.Sub(1)
 }
 
-func (j *Job) Wait() {
+func (j *AsyncObserver) Wait() {
 	if j.monitor != nil {
 		j.monitor.Render()
 	}
@@ -139,13 +140,13 @@ func (j *Job) Wait() {
 
 }
 
-func (j *Job) Info(text string) {
+func (j *AsyncObserver) Info(text string) {
 	if j.monitor != nil {
 		j.monitor.Info(text)
 	}
 }
 
-func (j *Job) WithTimeout(timeout time.Duration) error {
+func (j *AsyncObserver) WithTimeout(timeout time.Duration) error {
 	waitDelegate := make(chan struct{})
 
 	go func() {
@@ -162,38 +163,33 @@ func (j *Job) WithTimeout(timeout time.Duration) error {
 		if j.monitor != nil {
 			j.monitor.Finish()
 		}
-		j.Cancel()
+		j.Finish()
 		return fmt.Errorf("timed out after %+v", timeout)
 	}
 }
 
-func (j *Job) Canceled() <-chan struct{} {
+func (j *AsyncObserver) Canceled() <-chan struct{} {
 	return j.ctx.Done()
 }
 
-func (j *Job) TakeQuery() time.Time {
+func (j *AsyncObserver) TakeQuery() time.Time {
 	return j.query.Take()
 }
 
-func (j *Job) TakeSpawn() time.Time {
+func (j *AsyncObserver) TakeSpawn() time.Time {
 	_ = j.spawn.Wait(j.ctx)
 	return time.Now()
 }
 
-func (j *Job) Finish() {
+func (j *AsyncObserver) Finish() {
 	j.cancel()
 }
 
-func (j *Job) AsParentContext() context.Context {
+func (j *AsyncObserver) AsParentContext() context.Context {
 	return j.ctx
 }
 
-func (j *Job) Cancel() {
-	j.cancel()
-	j.Finish()
-}
-
-func (j *Job) SubmittedTask(payload InvocationPayload) {
+func (j *AsyncObserver) SubmittedTask(payload Invocation) {
 	j.lock.Lock()
 	defer j.lock.Unlock()
 
@@ -209,7 +205,7 @@ func (j *Job) SubmittedTask(payload InvocationPayload) {
 	j.submitted[payload.ID()] = payload
 }
 
-func (j *Job) PayloadFromId(payloadID string) (InvocationPayload, error) {
+func (j *AsyncObserver) SubmittedPayloadFromId(payloadID string) (Invocation, error) {
 	j.lock.Lock()
 	defer j.lock.Unlock()
 	if val, ok := j.submitted[payloadID]; ok {
@@ -219,7 +215,7 @@ func (j *Job) PayloadFromId(payloadID string) (InvocationPayload, error) {
 	}
 }
 
-func (j *Job) PrintStats() {
+func (j *AsyncObserver) PrintStats() {
 	totalTime := time.Duration(0)
 	failed := 0
 	min := time.Now()
@@ -228,7 +224,7 @@ func (j *Job) PrintStats() {
 			if t.SubmittedAt().Before(min) {
 				min = t.SubmittedAt()
 			}
-			totalTime += t.Latancy()
+			totalTime += t.InvocationDuration()
 		} else {
 			failed++
 		}

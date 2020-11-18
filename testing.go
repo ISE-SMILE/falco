@@ -75,11 +75,11 @@ func (m *MockWriter) Print() {
 type MockRuntime struct {
 }
 
-func (m *MockRuntime) MakeDeployment(c *Context, s ...string) (Deployable, error) {
+func (m *MockRuntime) MakeDeployment(c *Options, s ...string) (Deployable, error) {
 	panic("implement me")
 }
 
-func (m *MockRuntime) InvocationPayload(c *Context, s ...string) ([]InvocationPayload, error) {
+func (m *MockRuntime) InvocationPayload(c *Options, s ...string) ([]Invocation, error) {
 	panic("implement me")
 }
 

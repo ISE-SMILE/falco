@@ -122,7 +122,7 @@ func SetFlags(c *cli.Context) {
 	verbose = c.Bool("verbose")
 }
 
-func readCommonFlags(c *cli.Context, ctx *falco.Context) {
+func readCommonFlags(c *cli.Context, ctx *falco.Options) {
 	//read into params
 	if ctx != nil {
 		ctx.NewStingOption("S3", c.String("s3"))
@@ -139,7 +139,7 @@ func readCommonFlags(c *cli.Context, ctx *falco.Context) {
 	}
 }
 
-//func addFlags(c *cli.Context) map[string]string {
+//func addFlags(c *cli.Options) map[string]string {
 //	params := make(map[string]string)
 //	readCommonFlags(c, params)
 //	return params

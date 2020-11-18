@@ -25,12 +25,12 @@ package falco
 
 type Platform interface {
 	//deploys a function
-	Deploy(deployable Deployable) (Deployment,error)
+	Deploy(deployable Deployable) (Deployment, error)
 	//removes a deployment
 	Remove(deployment Deployment) error
 	//scales up the deployment or changes current configuration
-	Scale(Deployment,...ScaleOptions) (Deployment,error)
-	//all platforms are at least invocable
-	Invokable
+	Scale(Deployment, ...ScaleOptions) (Deployment, error)
 
+	//Invoke a makeDeploymentPayload directly
+	Invoke(Deployment, Invocation) (Invocation, error)
 }
