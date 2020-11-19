@@ -21,43 +21,42 @@
 // SOFTWARE.
 //
 
-package executors
+package falco
 
-import (
-	"fmt"
-	"github.com/ISE-SMILE/falco"
-)
-
-type ParallelExecutor struct {
-	Threads int
+type ProgressMonitor interface {
+	Setup()
+	Advance(int)
+	Expand(int)
+	Render()
+	Finish()
+	Info(string)
 }
 
-func (o ParallelExecutor) Execute(job *falco.AsyncInvocationPhase, submittable falco.AsyncPlatform) error {
-	queue := make(chan falco.Invocation, len(job.Payloads))
+type ExecutionPlan struct {
+	Phase AsyncInvocationPhase
 
-	results := make(chan error)
+	//TODO: implement interface to allow for shuffle/fan-in/fan-out/merge operations after each phase - followup task output of a phase needs to be known, e.g., part of the AsyncInvocationPhase struct.
 
-	worker := func(queue chan falco.Invocation, returns chan error) {
-		var counter = 0
-		for payload := range queue {
-			_, err := submittable.Invoke(job.Deployment, payload)
+	NextPhase *ExecutionPlan
+}
 
-			counter += 1
-			returns <- err
-		}
-		fmt.Printf("processed requests %d \n", counter)
-	}
+/**
+Interface to drive complex serverless applications that execute multiple invocations or ExecutionPlan.
+*/
+type Driver interface {
 
-	for _, p := range job.Payloads {
-		queue <- p
-	}
+	//Runtime() the runtime used by this driver
+	Runtime() Runtime
 
-	for i := 0; i < o.Threads; i++ {
-		go worker(queue, results)
-	}
-	close(queue)
-	for i := 0; i < len(job.Payloads); i++ {
-		<-results
-	}
-	return nil
+	//Strategies() a set of availible strategies by this driver
+	Strategies() []ExecutionStrategy
+
+	//ExecutionPlan() set of phases this driver needs to execute
+	ExecutionPlan() *ExecutionPlan
+
+	//Execute starts the execution of the ExecutionPlan using the specified ExecutionStrategy on the specified runtime.
+	//This method will block until all phases are done or a phase encountered an error.
+	Execute(strategy ExecutionStrategy, platform AsyncPlatform) error
+
+	ProgressMonitor
 }

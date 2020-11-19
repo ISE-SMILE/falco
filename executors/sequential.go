@@ -30,7 +30,7 @@ import (
 type SequentialExecutor struct {
 }
 
-func (p SequentialExecutor) Execute(job *falco.AsyncObserver, submittable falco.AsyncPlatform) error {
+func (p SequentialExecutor) Execute(job *falco.AsyncInvocationPhase, submittable falco.AsyncPlatform) error {
 
 	results := make([]falco.Invocation, 0)
 	for _, payload := range job.Payloads {

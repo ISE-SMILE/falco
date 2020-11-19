@@ -43,7 +43,7 @@ type Submitter struct {
 	strategies map[string]falco.ExecutionStrategy
 }
 
-func (s *Submitter) invokeStrategy(job *falco.AsyncObserver, strategy falco.ExecutionStrategy, collector falco.ResultCollector) error {
+func (s *Submitter) invokeStrategy(job *falco.AsyncInvocationPhase, strategy falco.ExecutionStrategy, collector falco.ResultCollector) error {
 	err := strategy.Execute(job, s.submitter, collector)
 
 	if err != nil {
@@ -108,7 +108,7 @@ func (s *Submitter) AddSubmitCommand() *cli.Command {
 
 				payload, err := s.runtime.InvocationPayload(ctx, keys...)
 
-				job := falco.NewJob(context.Background(), payload, c.Int("rps"), NewConsoleMonitor())
+				job := falco.NewPhase(context.Background(), payload, c.Int("rps"), NewConsoleMonitor())
 
 				if err != nil {
 					return err

@@ -33,16 +33,7 @@ import (
 	"time"
 )
 
-type ProgressMonitor interface {
-	Setup()
-	Advance(int)
-	Expand(int)
-	Render()
-	Finish()
-	Info(string)
-}
-
-type AsyncObserver struct {
+type AsyncInvocationPhase struct {
 	ctx context.Context
 
 	Options Options
@@ -68,10 +59,10 @@ type AsyncObserver struct {
 	monitor ProgressMonitor
 }
 
-func NewJob(ctx context.Context, tasks []Invocation,
-	requestsPerSeconds int, monitor ProgressMonitor) *AsyncObserver {
+func NewPhase(ctx context.Context, tasks []Invocation,
+	requestsPerSeconds int, monitor ProgressMonitor) *AsyncInvocationPhase {
 	jobCtx, cancel := context.WithCancel(ctx)
-	job := &AsyncObserver{
+	job := &AsyncInvocationPhase{
 		ctx:       jobCtx,
 		spawn:     rate.NewLimiter(rate.Every(time.Minute/time.Duration(requestsPerSeconds)), 10),
 		query:     ratelimit.New(requestsPerSeconds),
@@ -88,11 +79,11 @@ func NewJob(ctx context.Context, tasks []Invocation,
 	return job
 }
 
-func (j *AsyncObserver) Name() string {
+func (j *AsyncInvocationPhase) Name() string {
 	return j.Options.Name()
 }
 
-func (j *AsyncObserver) Done(payloadID string) {
+func (j *AsyncInvocationPhase) Done(payloadID string) {
 
 	if j.submissions.Load() > 0 {
 		j.wg.Done()
@@ -119,7 +110,7 @@ func (j *AsyncObserver) Done(payloadID string) {
 	j.submissions.Sub(1)
 }
 
-func (j *AsyncObserver) Wait() {
+func (j *AsyncInvocationPhase) Wait() {
 	if j.monitor != nil {
 		j.monitor.Render()
 	}
@@ -140,13 +131,13 @@ func (j *AsyncObserver) Wait() {
 
 }
 
-func (j *AsyncObserver) Info(text string) {
+func (j *AsyncInvocationPhase) Log(text string) {
 	if j.monitor != nil {
 		j.monitor.Info(text)
 	}
 }
 
-func (j *AsyncObserver) WithTimeout(timeout time.Duration) error {
+func (j *AsyncInvocationPhase) WithTimeout(timeout time.Duration) error {
 	waitDelegate := make(chan struct{})
 
 	go func() {
@@ -168,28 +159,31 @@ func (j *AsyncObserver) WithTimeout(timeout time.Duration) error {
 	}
 }
 
-func (j *AsyncObserver) Canceled() <-chan struct{} {
+func (j *AsyncInvocationPhase) Canceled() <-chan struct{} {
 	return j.ctx.Done()
 }
 
-func (j *AsyncObserver) TakeQuery() time.Time {
+//TakeQuery enabels rate limiting for api requests, e.g. for requesting the status of an invocation
+func (j *AsyncInvocationPhase) TakeQuery() time.Time {
 	return j.query.Take()
 }
 
-func (j *AsyncObserver) TakeSpawn() time.Time {
+//TakeInvocation enables rate limiting for invocation requests
+func (j *AsyncInvocationPhase) TakeInvocation() time.Time {
 	_ = j.spawn.Wait(j.ctx)
 	return time.Now()
 }
 
-func (j *AsyncObserver) Finish() {
+func (j *AsyncInvocationPhase) Finish() {
 	j.cancel()
 }
 
-func (j *AsyncObserver) AsParentContext() context.Context {
+func (j *AsyncInvocationPhase) AsParentContext() context.Context {
 	return j.ctx
 }
 
-func (j *AsyncObserver) SubmittedTask(payload Invocation) {
+//SubmittedTask is called to indicate that a payload was send to an invocation
+func (j *AsyncInvocationPhase) SubmittedTask(payload Invocation) {
 	j.lock.Lock()
 	defer j.lock.Unlock()
 
@@ -205,7 +199,7 @@ func (j *AsyncObserver) SubmittedTask(payload Invocation) {
 	j.submitted[payload.ID()] = payload
 }
 
-func (j *AsyncObserver) SubmittedPayloadFromId(payloadID string) (Invocation, error) {
+func (j *AsyncInvocationPhase) SubmittedPayloadFromId(payloadID string) (Invocation, error) {
 	j.lock.Lock()
 	defer j.lock.Unlock()
 	if val, ok := j.submitted[payloadID]; ok {
@@ -215,7 +209,7 @@ func (j *AsyncObserver) SubmittedPayloadFromId(payloadID string) (Invocation, er
 	}
 }
 
-func (j *AsyncObserver) PrintStats() {
+func (j *AsyncInvocationPhase) PrintStats() {
 	totalTime := time.Duration(0)
 	failed := 0
 	min := time.Now()

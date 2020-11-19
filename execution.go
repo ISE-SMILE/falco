@@ -24,5 +24,5 @@
 package falco
 
 type ExecutionStrategy interface {
-	Execute(*AsyncObserver, AsyncPlatform) error
+	Execute(*AsyncInvocationPhase, AsyncPlatform) error
 }

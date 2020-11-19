@@ -35,7 +35,7 @@ type AsyncExecutor struct {
 	Timeout time.Duration
 }
 
-func (p AsyncExecutor) Execute(job *falco.AsyncObserver, submittable falco.AsyncPlatform) error {
+func (p AsyncExecutor) Execute(job *falco.AsyncInvocationPhase, submittable falco.AsyncPlatform) error {
 
 	activations := make(chan falco.Invocation, len(job.Payloads))
 	start := time.Now()
@@ -48,11 +48,11 @@ func (p AsyncExecutor) Execute(job *falco.AsyncObserver, submittable falco.Async
 		}
 	}()
 
-	job.Info(fmt.Sprintf("submitting %d jobs\n", len(job.Payloads)))
+	job.Log(fmt.Sprintf("submitting %d jobs\n", len(job.Payloads)))
 
 	submitJobAsync(submittable, job.Payloads, job, activations)
 
-	job.Info(fmt.Sprintf("submitted %d jobs", len(job.Payloads)))
+	job.Log(fmt.Sprintf("submitted %d jobs", len(job.Payloads)))
 
 	close(activations)
 
@@ -73,7 +73,7 @@ func (p AsyncExecutor) Execute(job *falco.AsyncObserver, submittable falco.Async
 }
 
 //submit jobs async and waits until all are submitted; adds invoc results to a chan
-func submitJobAsync(submittable falco.AsyncPlatform, payloads []falco.Invocation, job *falco.AsyncObserver, activations chan falco.Invocation) {
+func submitJobAsync(submittable falco.AsyncPlatform, payloads []falco.Invocation, job *falco.AsyncInvocationPhase, activations chan falco.Invocation) {
 	threads := runtime.NumCPU()
 	chunkSize := (len(payloads) + threads - 1) / threads
 
@@ -92,7 +92,7 @@ func submitJobAsync(submittable falco.AsyncPlatform, payloads []falco.Invocation
 			for _, payload := range payloads {
 				err := submittable.Submit(job, payload, activations)
 				if err != nil {
-					job.Info(fmt.Sprintf("invocation error: %+v\n", err))
+					job.Log(fmt.Sprintf("invocation error: %+v\n", err))
 				}
 			}
 			sendGroup.Done()
