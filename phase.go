@@ -34,11 +34,8 @@ import (
 )
 
 type AsyncInvocationPhase struct {
+	ID  string
 	ctx context.Context
-
-	Options Options
-	//
-	Deployment Deployment
 
 	//submissions
 	submitted map[string]Invocation
@@ -59,10 +56,11 @@ type AsyncInvocationPhase struct {
 	monitor ProgressMonitor
 }
 
-func NewPhase(ctx context.Context, tasks []Invocation,
+func NewPhase(ctx context.Context, id string, tasks []Invocation,
 	requestsPerSeconds int, monitor ProgressMonitor) *AsyncInvocationPhase {
 	jobCtx, cancel := context.WithCancel(ctx)
 	job := &AsyncInvocationPhase{
+		ID:        id,
 		ctx:       jobCtx,
 		spawn:     rate.NewLimiter(rate.Every(time.Minute/time.Duration(requestsPerSeconds)), 10),
 		query:     ratelimit.New(requestsPerSeconds),
@@ -80,7 +78,7 @@ func NewPhase(ctx context.Context, tasks []Invocation,
 }
 
 func (j *AsyncInvocationPhase) Name() string {
-	return j.Options.Name()
+	return j.ID
 }
 
 func (j *AsyncInvocationPhase) Done(payloadID string) {

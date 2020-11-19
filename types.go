@@ -30,7 +30,7 @@ import (
 
 type Invocation interface {
 	//unique task IID (can be used to associate returned invocations to submitted invocations)
-	ID() string
+	DeploymentID() string
 	//the time this payload was send
 	SubmittedAt() time.Time
 	//the Duration between the submitted time and the time Done was called
@@ -69,7 +69,7 @@ type Deployable interface {
 }
 
 type Deployment interface {
-	ID() string
+	DeploymentID() string
 }
 
 type ScaleOptions func(deployment Deployment)

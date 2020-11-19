@@ -101,12 +101,12 @@ type OpenWhiskDeployment struct {
 	qualifiedName *QualifiedName
 }
 
-func (o OpenWhiskDeployment) ID() string {
+func (o OpenWhiskDeployment) DeploymentID() string {
 	return o.ActionName
 }
 
 func ActionName() string {
-	return StringWithCharset(12, charset)
+	return RandomStringWithCharset(12, charset)
 }
 
 func (ow *OpenWhisk) Deploy(deployable falco.Deployable) (falco.Deployment, error) {
@@ -247,10 +247,10 @@ func (ow *OpenWhisk) Invoke(deployment falco.Deployment, payload falco.Invocatio
 	return payload, nil
 }
 
-func (ow *OpenWhisk) Submit(job *falco.AsyncInvocationPhase, payload falco.Invocation,
+func (ow *OpenWhisk) Submit(job *falco.AsyncInvocationPhase, target falco.Deployment, payload falco.Invocation,
 	activationQueue chan<- falco.Invocation, options ...falco.InvocableOptions) error {
 
-	whiskDeployment, ok := job.Deployment.(OpenWhiskDeployment)
+	whiskDeployment, ok := target.(OpenWhiskDeployment)
 	if !ok {
 		return fmt.Errorf("job is not a AsyncInvocationPhase not compatible with OpenWhisk")
 	}

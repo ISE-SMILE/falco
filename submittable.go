@@ -29,6 +29,6 @@ package falco
 type AsyncPlatform interface {
 	Platform
 
-	Submit(*AsyncInvocationPhase, Invocation, chan<- Invocation, ...InvocableOptions) error
+	Submit(*AsyncInvocationPhase, Deployment, Invocation, chan<- Invocation, ...InvocableOptions) error
 	Collect(*AsyncInvocationPhase, <-chan Invocation, ...InvocableOptions) error
 }

@@ -50,12 +50,12 @@ type DockerDeployment struct {
 	activationID  string
 }
 
-func (d DockerDeployment) ID() string {
+func (d DockerDeployment) DeploymentID() string {
 	return fmt.Sprintf("%s_%s", d.containerName, d.ContainerID)
 }
 
 func ContainerName() string {
-	return StringWithCharset(8, charset)
+	return RandomStringWithCharset(8, charset)
 }
 
 func NewOpenWhiskDockerRunner(ctx context.Context) *OpenWhiskDockerRunner {
@@ -97,7 +97,7 @@ func (o OpenWhiskDockerRunner) Deploy(deployable falco.Deployable) (falco.Deploy
 		ContainerID:   containerReq.ID,
 		containerName: containerName,
 		nameSpace:     ContainerName(),
-		activationID:  StringWithCharset(15, charset),
+		activationID:  RandomStringWithCharset(15, charset),
 	}
 
 	envMap := map[string]string{
@@ -114,7 +114,7 @@ func (o OpenWhiskDockerRunner) Deploy(deployable falco.Deployable) (falco.Deploy
 
 	msg := OpenWhiskMessage{
 		Value: InitMessage{
-			Name:   deployment.ID(),
+			Name:   deployment.DeploymentID(),
 			Main:   "none",
 			Code:   deployable.Payload().(string),
 			Binary: false,
@@ -169,7 +169,7 @@ func (o OpenWhiskDockerRunner) Invoke(deployment falco.Deployment, payload falco
 	msg := RunMessage{
 		Input:         payload,
 		Namespace:     dockerDeployment.nameSpace,
-		Name:          dockerDeployment.ID(),
+		Name:          dockerDeployment.DeploymentID(),
 		Key:           "DUMMY-KEY",
 		ActivationID:  dockerDeployment.activationID,
 		TransactionID: dockerDeployment.activationID,
