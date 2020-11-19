@@ -32,12 +32,18 @@ type ProgressMonitor interface {
 	Info(string)
 }
 
-type ExecutionPlan struct {
-	Phase AsyncInvocationPhase
+type ExecutionPlan interface {
+
+	//Integrated Deployable
+
+	Phase() AsyncInvocationPhase
 
 	//TODO: implement interface to allow for shuffle/fan-in/fan-out/merge operations after each phase - followup task output of a phase needs to be known, e.g., part of the AsyncInvocationPhase struct.
 
-	NextPhase *ExecutionPlan
+	NextPhase() *ExecutionPlan
+
+	Deploy(platform AsyncPlatform)
+	Remove(platform AsyncPlatform)
 }
 
 /**
@@ -57,6 +63,9 @@ type Driver interface {
 	//Execute starts the execution of the ExecutionPlan using the specified ExecutionStrategy on the specified runtime.
 	//This method will block until all phases are done or a phase encountered an error.
 	Execute(strategy ExecutionStrategy, platform AsyncPlatform) error
+
+	Deploy(platform AsyncPlatform)
+	Remove(platform AsyncPlatform)
 
 	ProgressMonitor
 }

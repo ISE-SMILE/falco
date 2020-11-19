@@ -6,7 +6,10 @@
 <!--TODO: Logo / possible rename? -->
 
 ## About
-Library to implement custom FaaS-based massive parallel processing piplines.
+Library to implement custom FaaS-based massive parallel analytics piplines. 
+Falco provides interfaces to implement a custom Driver for you'r analytics piplline,
+allowing you to manage execution and coordination of your functions without worrining about
+deployment needs. 
 
 ### Build With
  * go 1.14 <!--TODO: link! -->
