@@ -30,7 +30,7 @@ import (
 
 type Invocation interface {
 	//unique task IID (can be used to associate returned invocations to submitted invocations)
-	DeploymentID() string
+	InvocationID() string
 	//the time this payload was send
 	SubmittedAt() time.Time
 	//the Duration between the submitted time and the time Done was called
@@ -80,7 +80,7 @@ type Options struct {
 }
 
 func NewFacloOptions(name string) *Options {
-	return &Options{name: name}
+	return &Options{name: name, options: make(map[string]interface{})}
 }
 
 func (r *Options) Name() string {

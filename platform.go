@@ -26,6 +26,10 @@ package falco
 type Platform interface {
 	//deploys a function
 	Deploy(deployable Deployable) (Deployment, error)
+
+	//fetches or creates a Deployment using the deploymentID
+	FetchDeployment(deplotmentID string) (Deployment, error)
+
 	//removes a deployment
 	Remove(deployment Deployment) error
 	//scales up the deployment or changes current configuration

@@ -31,4 +31,5 @@ type AsyncPlatform interface {
 
 	Submit(*AsyncInvocationPhase, Deployment, Invocation, chan<- Invocation, ...InvocableOptions) error
 	Collect(*AsyncInvocationPhase, <-chan Invocation, ...InvocableOptions) error
+	FetchActivationLog(deployment Deployment, invocation Invocation) map[string]interface{}
 }

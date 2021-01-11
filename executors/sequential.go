@@ -40,6 +40,6 @@ func (p SequentialExecutor) Execute(job *falco.AsyncInvocationPhase, target falc
 		}
 		results = append(results, inv)
 	}
-
+	job.Payloads = results
 	return nil
 }

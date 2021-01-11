@@ -138,10 +138,10 @@ func (ow *OpenWhisk) Deploy(deployable falco.Deployable) (falco.Deployment, erro
 	//WHY Go WHY!
 	MemoryLimit := context.Int("memory", 192)
 	deployment.Memory = MemoryLimit
-
+	var Timeout = 300000
 	//TODO: do we want to make this context dependend?!
 	action.Limits = &whisk.Limits{
-		Timeout: nil,
+		Timeout: &Timeout,
 		Memory:  &MemoryLimit,
 		Logsize: nil,
 
@@ -160,10 +160,58 @@ func (ow *OpenWhisk) Deploy(deployable falco.Deployable) (falco.Deployment, erro
 	return deployment, err
 }
 
+func (ow *OpenWhisk) FetchDeployment(actionName string) (falco.Deployment, error) {
+	action, _, err := ow.cli.Actions.Get(actionName, false)
+	if err != nil {
+		return nil, err
+	}
+
+	var qualifiedName = new(QualifiedName)
+	if qualifiedName, err = NewQualifiedName(actionName); err != nil {
+		return nil, fmt.Errorf("failed to create a qualified name for %s cause:%v", actionName, err)
+	}
+
+	deployment := OpenWhiskDeployment{
+		ActionName:    actionName,
+		Memory:        *action.Limits.Memory,
+		action:        action,
+		qualifiedName: qualifiedName,
+	}
+
+	return deployment, nil
+
+}
+
+func (ow *OpenWhisk) FetchActivationLog(deployment falco.Deployment, invocation falco.Invocation) map[string]interface{} {
+	qualifiedName := ow.qualifiedName(deployment)
+	if qualifiedName == nil {
+		return nil
+	}
+	ow.cli.Namespace = qualifiedName.GetNamespace()
+
+	if invocation.RuntimeReference() == nil {
+		return nil
+	}
+
+	activation, _, err := ow.cli.Activations.Get(invocation.RuntimeReference().(string))
+	if err != nil {
+		return nil
+	}
+
+	result := *activation.Result
+	if result != nil {
+		result["OW_Duration"] = activation.Duration
+		result["OW_Start"] = activation.Start
+		result["OW_InitTime"] = activation.Annotations.GetValue("initTime")
+	}
+
+	return result
+}
+
 func (ow *OpenWhisk) Remove(deployment falco.Deployment) error {
 	qualifiedName := ow.qualifiedName(deployment)
 	if qualifiedName == nil {
-		return fmt.Errorf("failed to create a qualified name for %s ", deployment.ID())
+		return fmt.Errorf("failed to create a qualified name for %s ", deployment.DeploymentID())
 	}
 	ow.cli.Namespace = qualifiedName.GetNamespace()
 
@@ -237,7 +285,7 @@ func (ow *OpenWhisk) Invoke(deployment falco.Deployment, payload falco.Invocatio
 
 	payload.Done(&elapsed)
 	payload.SetResult(inv)
-
+	payload.SetRuntimeReference(resp.Header.Get("X-Openwhisk-Activation-Id"))
 	if ow.Verbose {
 		data, _ := ioutil.ReadAll(resp.Body)
 		fmt.Printf("got %s\n", string(data))
@@ -272,15 +320,20 @@ func (ow *OpenWhisk) Submit(job *falco.AsyncInvocationPhase, target falco.Deploy
 	if err != nil {
 		return err
 	}
-	if ow.Verbose {
-		if id, ok := inv["activationId"]; ok {
+
+	if id, ok := inv["activationId"]; ok {
+		if ow.Verbose {
 			job.Log(fmt.Sprintf("%s\n", id))
-			payload.SetRuntimeReference(id)
-		} else {
-			job.Log(fmt.Sprintf("[%d] %s\n", resp.StatusCode, payload.ID))
 		}
+		payload.SetRuntimeReference(id)
+	} else {
+		if ow.Verbose {
+			job.Log(fmt.Sprintf("[%d] %s\n", resp.StatusCode, payload.InvocationID()))
+		}
+		payload.SetRuntimeReference(resp.Header.Get("X-Openwhisk-Activation-Id"))
 	}
-	inv["fid"] = payload.ID()
+
+	inv["fid"] = payload.InvocationID()
 
 	if activationQueue != nil {
 		activationQueue <- payload
@@ -320,10 +373,10 @@ func (ow *OpenWhisk) fetchAsyncResult(job *falco.AsyncInvocationPhase, pool chan
 	tries := 0
 
 	//hint that this request was processed (or failed)
-	defer job.Done(activation.ID())
+	defer job.Done(activation.InvocationID())
 	activationID := activation.RuntimeReference().(string)
 	if ow.Verbose {
-		job.Log(fmt.Sprintf("fetching %s\n", activation.ID()))
+		job.Log(fmt.Sprintf("fetching %s\n", activation.InvocationID()))
 	}
 
 	for {

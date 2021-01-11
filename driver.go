@@ -28,7 +28,7 @@ type ProgressMonitor interface {
 	Advance(int)
 	Expand(int)
 	Render()
-	Finish()
+	Finish(map[string]interface{})
 	Info(string)
 }
 
@@ -40,6 +40,8 @@ type Driver interface {
 	//Runtime() the runtime used by this driver
 	Runtime() Runtime
 
+	//TODO: Remove
+	//DEPRECATED
 	//Strategies() a set of availible strategies by this driver
 	Strategies() []ExecutionStrategy
 
@@ -52,8 +54,6 @@ type Driver interface {
 
 	Deploy(platform AsyncPlatform)
 	Remove(platform AsyncPlatform)
-
-	ProgressMonitor
 }
 
 //XXX: longterm - this should be a DAG instead of a List, there are pob. Phases that can run in parallel ;) but for now we assume full phase interdependencies
@@ -107,9 +107,17 @@ func (e *ExecutionPlan) Next() *ExecutionPlan {
 	return e.next
 }
 
+func (e *ExecutionPlan) UseDeployment(platform AsyncPlatform, deploymentID string) (Deployment, error) {
+	dep, err := platform.FetchDeployment(deploymentID)
+	if err == nil {
+		e.deployment = dep
+	}
+	return dep, err
+}
+
 func (e *ExecutionPlan) Deploy(platform AsyncPlatform) (Deployment, error) {
 	dep, err := platform.Deploy(e.Deployable)
-	if err != nil {
+	if err == nil {
 		e.deployment = dep
 	}
 	return dep, err
@@ -120,4 +128,8 @@ func (e *ExecutionPlan) Remove(platform AsyncPlatform) error {
 		return platform.Remove(e.deployment)
 	}
 	return nil
+}
+
+func (e *ExecutionPlan) GetDeployment() Deployment {
+	return e.deployment
 }

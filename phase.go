@@ -54,6 +54,8 @@ type AsyncInvocationPhase struct {
 	submissions atomic.Int64
 	//output
 	monitor ProgressMonitor
+
+	Deployment Deployment
 }
 
 func NewPhase(ctx context.Context, id string, tasks []Invocation,
@@ -110,7 +112,7 @@ func (j *AsyncInvocationPhase) Done(payloadID string) {
 
 func (j *AsyncInvocationPhase) Wait() {
 	if j.monitor != nil {
-		j.monitor.Render()
+		go j.monitor.Render()
 	}
 
 	waitDelegate := make(chan struct{})
@@ -122,10 +124,7 @@ func (j *AsyncInvocationPhase) Wait() {
 	case <-waitDelegate:
 	case <-j.ctx.Done():
 	}
-
-	if j.monitor != nil {
-		j.monitor.Finish()
-	}
+	j.Finish()
 
 }
 
@@ -149,9 +148,6 @@ func (j *AsyncInvocationPhase) WithTimeout(timeout time.Duration) error {
 	case <-waitDelegate:
 		return nil
 	case <-time.After(timeout):
-		if j.monitor != nil {
-			j.monitor.Finish()
-		}
 		j.Finish()
 		return fmt.Errorf("timed out after %+v", timeout)
 	}
@@ -174,6 +170,10 @@ func (j *AsyncInvocationPhase) TakeInvocation() time.Time {
 
 func (j *AsyncInvocationPhase) Finish() {
 	j.cancel()
+
+	//if j.monitor != nil {
+	//	j.monitor.Finish()
+	//}
 }
 
 func (j *AsyncInvocationPhase) AsParentContext() context.Context {
@@ -191,10 +191,10 @@ func (j *AsyncInvocationPhase) SubmittedTask(payload Invocation) {
 
 	j.wg.Add(1)
 	j.submissions.Add(1)
-	if _, ok := j.submitted[payload.ID()]; ok {
+	if _, ok := j.submitted[payload.InvocationID()]; ok {
 		payload.MarkAsResubmitted()
 	}
-	j.submitted[payload.ID()] = payload
+	j.submitted[payload.InvocationID()] = payload
 }
 
 func (j *AsyncInvocationPhase) SubmittedPayloadFromId(payloadID string) (Invocation, error) {
