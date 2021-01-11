@@ -30,7 +30,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"runtime"
-	"time"
+	time "time"
 )
 
 type OpenWhisk struct {
@@ -50,20 +50,12 @@ type OpenWhiskOption func(*OpenWhisk)
 func WithHost(host string) OpenWhiskOption {
 	return func(openWhisk *OpenWhisk) {
 		openWhisk.Host = host
-		err := openWhisk.connect()
-		if err != nil {
-			panic(err)
-		}
 	}
 }
 
 func WithAuthToken(token string) OpenWhiskOption {
 	return func(openWhisk *OpenWhisk) {
 		openWhisk.Token = token
-		err := openWhisk.connect()
-		if err != nil {
-			panic(err)
-		}
 	}
 }
 
@@ -109,28 +101,21 @@ type OpenWhiskDeployment struct {
 	qualifiedName *QualifiedName
 }
 
-func (o OpenWhiskDeployment) ID() string {
+func (o OpenWhiskDeployment) DeploymentID() string {
 	return o.ActionName
 }
 
 func ActionName() string {
-	return StringWithCharset(12, charset)
+	return RandomStringWithCharset(12, charset)
 }
 
 func (ow *OpenWhisk) Deploy(deployable falco.Deployable) (falco.Deployment, error) {
-	var actionName string
-	if deployable.Name() == "" {
-		actionName = ActionName()
-	} else {
-		actionName = deployable.Name()
-	}
-
 	var qualifiedName = new(QualifiedName)
 	deployment := OpenWhiskDeployment{
-		ActionName: actionName,
+		ActionName: ActionName(),
 	}
 	var err error
-	context := deployable.Context()
+	context := deployable.Option()
 
 	if qualifiedName, err = NewQualifiedName(deployment.ActionName); err != nil {
 		return nil, fmt.Errorf("failed to create a qualified name for %s cause:%v", deployment.ActionName, err)
@@ -153,18 +138,18 @@ func (ow *OpenWhisk) Deploy(deployable falco.Deployable) (falco.Deployment, erro
 	//WHY Go WHY!
 	MemoryLimit := context.Int("memory", 192)
 	deployment.Memory = MemoryLimit
-
+	var Timeout = 300000
 	//TODO: do we want to make this context dependend?!
 	action.Limits = &whisk.Limits{
-		Timeout: nil,
+		Timeout: &Timeout,
 		Memory:  &MemoryLimit,
 		Logsize: nil,
 
 		Concurrency: nil,
 	}
 
-	payload := deployable.Payload()
-	runtimeIdentifier := deployable.Runtime()
+	payload := deployable.Payload().(string)
+	runtimeIdentifier := deployable.Runtime().Identifier()
 	action.Exec = &whisk.Exec{
 		Kind: runtimeIdentifier,
 		Code: &payload,
@@ -175,10 +160,58 @@ func (ow *OpenWhisk) Deploy(deployable falco.Deployable) (falco.Deployment, erro
 	return deployment, err
 }
 
+func (ow *OpenWhisk) FetchDeployment(actionName string) (falco.Deployment, error) {
+	action, _, err := ow.cli.Actions.Get(actionName, false)
+	if err != nil {
+		return nil, err
+	}
+
+	var qualifiedName = new(QualifiedName)
+	if qualifiedName, err = NewQualifiedName(actionName); err != nil {
+		return nil, fmt.Errorf("failed to create a qualified name for %s cause:%v", actionName, err)
+	}
+
+	deployment := OpenWhiskDeployment{
+		ActionName:    actionName,
+		Memory:        *action.Limits.Memory,
+		action:        action,
+		qualifiedName: qualifiedName,
+	}
+
+	return deployment, nil
+
+}
+
+func (ow *OpenWhisk) FetchActivationLog(deployment falco.Deployment, invocation falco.Invocation) map[string]interface{} {
+	qualifiedName := ow.qualifiedName(deployment)
+	if qualifiedName == nil {
+		return nil
+	}
+	ow.cli.Namespace = qualifiedName.GetNamespace()
+
+	if invocation.RuntimeReference() == nil {
+		return nil
+	}
+
+	activation, _, err := ow.cli.Activations.Get(invocation.RuntimeReference().(string))
+	if err != nil {
+		return nil
+	}
+
+	result := *activation.Result
+	if result != nil {
+		result["OW_Duration"] = activation.Duration
+		result["OW_Start"] = activation.Start
+		result["OW_InitTime"] = activation.Annotations.GetValue("initTime")
+	}
+
+	return result
+}
+
 func (ow *OpenWhisk) Remove(deployment falco.Deployment) error {
 	qualifiedName := ow.qualifiedName(deployment)
 	if qualifiedName == nil {
-		return fmt.Errorf("failed to create a qualified name for %s ", deployment.ID())
+		return fmt.Errorf("failed to create a qualified name for %s ", deployment.DeploymentID())
 	}
 	ow.cli.Namespace = qualifiedName.GetNamespace()
 
@@ -229,11 +262,11 @@ func (ow *OpenWhisk) Scale(deployment falco.Deployment, options ...falco.ScaleOp
 	return whiskDeployment, nil
 }
 
-func (ow *OpenWhisk) Invoke(deployment falco.Deployment, payload falco.InvocationPayload, writer falco.ResultCollector) error {
+func (ow *OpenWhisk) Invoke(deployment falco.Deployment, payload falco.Invocation) (falco.Invocation, error) {
 	whiskDeployment := deployment.(OpenWhiskDeployment)
 	qualifiedName := ow.qualifiedName(whiskDeployment)
 	if qualifiedName == nil {
-		return fmt.Errorf("failed to create a qualified name for %s cause", whiskDeployment.ActionName)
+		return nil, fmt.Errorf("failed to create a qualified name for %s cause", whiskDeployment.ActionName)
 	}
 
 	ow.cli.Namespace = qualifiedName.GetNamespace()
@@ -247,38 +280,30 @@ func (ow *OpenWhisk) Invoke(deployment falco.Deployment, payload falco.Invocatio
 	elapsed := time.Since(start)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if writer != nil {
-		var measurements falco.Measurement
-		measurements = inv
-
-		payload.Runtime().MakeMeasurement(measurements)
-
-		writeMeasurement(measurements, payload.ID(), elapsed, writer)
-
-		fmt.Printf("got %+v\n", measurements)
-	}
-
-	if writer == nil && ow.Verbose {
+	payload.Done(&elapsed)
+	payload.SetResult(inv)
+	payload.SetRuntimeReference(resp.Header.Get("X-Openwhisk-Activation-Id"))
+	if ow.Verbose {
 		data, _ := ioutil.ReadAll(resp.Body)
 		fmt.Printf("got %s\n", string(data))
 		//fmt.Printf("%+v", res)
 	}
 
-	return nil
+	return payload, nil
 }
 
-func (ow *OpenWhisk) Submit(job *falco.Job, payload falco.InvocationPayload,
-	activationQueue chan<- map[string]interface{}, options ...falco.InvocableOptions) error {
+func (ow *OpenWhisk) Submit(job *falco.AsyncInvocationPhase, target falco.Deployment, payload falco.Invocation,
+	activationQueue chan<- falco.Invocation, options ...falco.InvocableOptions) error {
 
-	whiskDeployment, ok := job.Deployment.(OpenWhiskDeployment)
+	whiskDeployment, ok := target.(OpenWhiskDeployment)
 	if !ok {
-		return fmt.Errorf("job is not a Job not compatible with OpenWhisk")
+		return fmt.Errorf("job is not a AsyncInvocationPhase not compatible with OpenWhisk")
 	}
 
-	job.TakeSpawn()
+	job.TakeInvocation()
 
 	qualifiedName := ow.qualifiedName(whiskDeployment)
 	if qualifiedName == nil {
@@ -295,17 +320,23 @@ func (ow *OpenWhisk) Submit(job *falco.Job, payload falco.InvocationPayload,
 	if err != nil {
 		return err
 	}
-	if ow.Verbose {
-		if id, ok := inv["activationId"]; ok {
-			job.Info(fmt.Sprintf("%s\n", id))
-		} else {
-			job.Info(fmt.Sprintf("[%d] %s\n", resp.StatusCode, payload.ID()))
+
+	if id, ok := inv["activationId"]; ok {
+		if ow.Verbose {
+			job.Log(fmt.Sprintf("%s\n", id))
 		}
+		payload.SetRuntimeReference(id)
+	} else {
+		if ow.Verbose {
+			job.Log(fmt.Sprintf("[%d] %s\n", resp.StatusCode, payload.InvocationID()))
+		}
+		payload.SetRuntimeReference(resp.Header.Get("X-Openwhisk-Activation-Id"))
 	}
-	inv["fid"] = payload.ID()
+
+	inv["fid"] = payload.InvocationID()
 
 	if activationQueue != nil {
-		activationQueue <- inv
+		activationQueue <- payload
 	}
 	payload.Submitted()
 	job.SubmittedTask(payload)
@@ -314,7 +345,7 @@ func (ow *OpenWhisk) Submit(job *falco.Job, payload falco.InvocationPayload,
 	return nil
 }
 
-func (ow *OpenWhisk) Collect(job *falco.Job, activations <-chan map[string]interface{}, writer falco.ResultCollector,
+func (ow *OpenWhisk) Collect(job *falco.AsyncInvocationPhase, activations <-chan falco.Invocation,
 	options ...falco.InvocableOptions) error {
 	threads := ow.threads
 	pool := make(chan struct{}, threads)
@@ -324,7 +355,7 @@ func (ow *OpenWhisk) Collect(job *falco.Job, activations <-chan map[string]inter
 			//block if to many request are currently pending
 			if ok {
 				pool <- struct{}{}
-				go ow.fetchAsyncResult(job, pool, activation, writer)
+				go ow.fetchAsyncResult(job, pool, activation)
 			} else {
 				time.Sleep(200 * time.Millisecond)
 			}
@@ -335,32 +366,17 @@ func (ow *OpenWhisk) Collect(job *falco.Job, activations <-chan map[string]inter
 	}
 }
 
-func (ow *OpenWhisk) fetchAsyncResult(job *falco.Job, pool chan struct{}, activation map[string]interface{}, writer falco.ResultCollector) {
+func (ow *OpenWhisk) fetchAsyncResult(job *falco.AsyncInvocationPhase, pool chan struct{}, activation falco.Invocation) {
 	//give back the worker ticket
 	defer func() { <-pool }()
 
 	tries := 0
 
-	var activationID string
-	if id, ok := activation["activationId"]; ok {
-		activationID = id.(string)
-	} else {
-		//XXX How did this happen?
-		if ow.Verbose {
-			fmt.Printf("unexpected state:%+v\n", activation)
-		}
-		return
-	}
-
-	name := ""
-	if val, ok := activation["fid"]; ok && val != nil {
-		name = val.(string)
-	}
 	//hint that this request was processed (or failed)
-	defer job.Done(name)
-
+	defer job.Done(activation.InvocationID())
+	activationID := activation.RuntimeReference().(string)
 	if ow.Verbose {
-		job.Info(fmt.Sprintf("fetching %s\n", activationID))
+		job.Log(fmt.Sprintf("fetching %s\n", activation.InvocationID()))
 	}
 
 	for {
@@ -381,33 +397,10 @@ func (ow *OpenWhisk) fetchAsyncResult(job *falco.Job, pool chan struct{}, activa
 			//we will reintroduce this activation after 1 second
 			time.Sleep(200 * time.Millisecond)
 		} else if resp != nil && resp.StatusCode == http.StatusOK {
-			//warining write ris null
-			if writer != nil {
+			activation.SetResult(get.Result)
+			elapsedTime := time.Duration(get.Duration)
+			activation.Done(&elapsedTime)
 
-				var measurements falco.Measurement
-				measurements = falco.Measurement(*get.Result)
-
-				if measurements != nil {
-					writeMeasurement(measurements, name, time.Duration(get.Duration), writer)
-				} else {
-					if name != "" {
-						if payload, err := job.PayloadFromId(name); err == nil {
-							writer.Add(payload.Runtime().MakeFailure(name, get.Cause, payload.SubmittedAt()))
-						} else {
-							if ow.Verbose {
-								fmt.Printf("unknowen payload %s", name)
-							}
-						}
-					}
-
-					if ow.Verbose {
-						fmt.Printf("%s failed due to %s:\n%+v", get.ActivationID, get.Cause, get.Logs)
-					}
-				}
-
-			} else {
-				//why are we dooing is with an empty writer?
-			}
 			//done with the mission...
 
 			return
@@ -424,9 +417,7 @@ func (ow *OpenWhisk) fetchAsyncResult(job *falco.Job, pool chan struct{}, activa
 		//
 		if tries > ow.maxRetry {
 			fmt.Printf("could not fetch %s after %d tries\n", activationID, ow.maxRetry)
-			if payload, err := job.PayloadFromId(name); err == nil {
-				writer.Add(payload.Runtime().MakeFailure(name, "timeout", payload.SubmittedAt()))
-			}
+			activation.SetError(fmt.Errorf("function invocation timeout, last submit at %d", activation.SubmittedAt()))
 			return
 		}
 		//here comes the hack, we either wait using time.After for a fixed period or get canceled during it
@@ -434,9 +425,7 @@ func (ow *OpenWhisk) fetchAsyncResult(job *falco.Job, pool chan struct{}, activa
 		select {
 		case <-job.Canceled():
 			fmt.Printf("failed to collect %s\n", activationID)
-			if payload, err := job.PayloadFromId(name); err == nil {
-				writer.Add(payload.Runtime().MakeFailure(name, "activation canceled", payload.SubmittedAt()))
-			}
+			activation.SetError(fmt.Errorf("canceld to wait on activation", activation.SubmittedAt()))
 			return
 		case <-time.After(ow.BACKOFF):
 			// if we reach this point than try again...
@@ -445,6 +434,10 @@ func (ow *OpenWhisk) fetchAsyncResult(job *falco.Job, pool chan struct{}, activa
 }
 
 func (ow *OpenWhisk) connect() error {
+	if ow.cli != nil {
+		return nil
+	}
+
 	//TODO: check if we can pick a better client?
 
 	baseurl, _ := whisk.GetURLBase(ow.Host, "/api")
@@ -456,12 +449,6 @@ func (ow *OpenWhisk) connect() error {
 		Insecure:  true,
 		Host:      ow.Host,
 		UserAgent: "Golang/Smile cli",
-	}
-
-	if ow.cli != nil {
-		if ow.cli.Config == clientConfig {
-			return nil
-		}
 	}
 
 	client, err := whisk.NewClient(http.DefaultClient, clientConfig)

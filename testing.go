@@ -51,47 +51,18 @@ func (m Monitor) Info(s string) {
 	//fmt.Fprintln(os.Stderr,s)
 }
 
-type MockWriter struct {
-	data []Measurement
-}
-
-func (m *MockWriter) Add(measurement Measurement) {
-	if m.data == nil {
-		m.data = make([]Measurement, 0)
-	}
-	m.data = append(m.data, measurement)
-}
-
-func (m *MockWriter) Write(s string) error {
-	return nil
-}
-
-func (m *MockWriter) Print() {
-	for _, d := range m.data {
-		fmt.Printf("%+v\n", d)
-	}
-}
-
 type MockRuntime struct {
 }
 
-func (m *MockRuntime) InvocationStrategies() []InvocationStrategy {
-	return []InvocationStrategy{}
-}
-
-func (m *MockRuntime) InvocationPayload(context *Context, workdir string, files ...string) ([]InvocationPayload, error) {
+func (m *MockRuntime) Identifier() string {
 	panic("implement me")
 }
 
-func (m *MockRuntime) MakeDeployment(c *Context, s ...string) (Deployable, error) {
+func (m *MockRuntime) MakeDeployment(c *Options, s ...string) (Deployable, error) {
 	panic("implement me")
 }
 
-func (m *MockRuntime) MakeFailure(id, cause string, start time.Time) Measurement {
-	panic("implement me")
-}
-
-func (m *MockRuntime) MakeMeasurement(m2 map[string]interface{}) Measurement {
+func (m *MockRuntime) InvocationPayload(c *Options, s ...string) ([]Invocation, error) {
 	panic("implement me")
 }
 
@@ -103,31 +74,55 @@ type MockInvocation struct {
 	ERR             error
 	Tries           int8
 	Delay           time.Duration
+	duration        time.Duration
 	SuccessSelector func(invocation *MockInvocation) bool
+
+	result    string
+	runtimeID string
 }
 
-func (m *MockInvocation) Status() InvocationStatus {
-	if m.ERR != nil {
-		return Failure
+func (m *MockInvocation) InvocationDuration() time.Duration {
+	panic("implement me")
+}
+
+func (m *MockInvocation) Done(duration *time.Duration) {
+	m.COM = time.Now()
+	if duration != nil {
+		m.duration = *duration
 	} else {
-		return Success
+		m.duration = m.COM.Sub(m.SUB)
 	}
+
+	m.DONE = true
+	panic("implement me")
+}
+
+func (m *MockInvocation) SetResult(result interface{}) {
+	m.result = result.(string)
+}
+
+func (m *MockInvocation) Result() interface{} {
+	return m.result
+}
+
+func (m *MockInvocation) SetRuntimeReference(id interface{}) {
+	m.runtimeID = id.(string)
+}
+
+func (m *MockInvocation) RuntimeReference() interface{} {
+	return m.runtimeID
 }
 
 func (m *MockInvocation) MarkAsResubmitted() {
 	//NO-OP
 }
 
-func (m *MockInvocation) ID() string {
+func (m *MockInvocation) DeploymentID() string {
 	return m.IID
 }
 
 func (m *MockInvocation) SubmittedAt() time.Time {
 	return m.SUB
-}
-
-func (m *MockInvocation) Latancy() time.Duration {
-	return m.COM.Sub(m.SUB)
 }
 
 func (m *MockInvocation) IsCompleted() bool {
@@ -155,13 +150,6 @@ func (m *MockInvocation) SetError(err error) {
 func (m *MockInvocation) Runtime() Runtime {
 	return &MockRuntime{}
 }
-
-func (m *MockInvocation) Done() {
-	m.COM = time.Now()
-	m.DONE = true
-}
-
-func (m *MockInvocation) WriteError(writer ResultCollector) {}
 
 func (m *MockInvocation) Succeed() bool {
 	if m.SuccessSelector != nil {

@@ -35,12 +35,55 @@ import (
 	"github.com/docker/go-connections/nat"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 )
 
 type OpenWhiskDockerRunner struct {
 	cli *client.Client
 	ctx context.Context
+}
+
+func (o OpenWhiskDockerRunner) FetchActivationLog(deployment falco.Deployment, invocation falco.Invocation) map[string]interface{} {
+	if invocation.Result() != nil {
+		return invocation.Result().(map[string]interface{})
+	}
+	return nil
+}
+
+func (o OpenWhiskDockerRunner) Submit(job *falco.AsyncInvocationPhase, deployment falco.Deployment,
+	payload falco.Invocation, invocations chan<- falco.Invocation, options ...falco.InvocableOptions) error {
+
+	job.TakeInvocation()
+
+	inv, err := o.Invoke(deployment, payload)
+	if err != nil {
+		return err
+	}
+
+	if invocations != nil {
+		invocations <- inv
+	}
+
+	payload.Submitted()
+	job.SubmittedTask(payload)
+	return nil
+}
+
+func (o OpenWhiskDockerRunner) Collect(job *falco.AsyncInvocationPhase,
+	activations <-chan falco.Invocation, options ...falco.InvocableOptions) error {
+	for {
+		select {
+		case activation, ok := <-activations:
+			if ok {
+				fmt.Printf("%+v\n", activation)
+			}
+		case <-job.Canceled():
+			fmt.Printf("collection canceld with %d activations left\n", len(activations))
+		}
+	}
+
+	return nil
 }
 
 type DockerDeployment struct {
@@ -50,12 +93,12 @@ type DockerDeployment struct {
 	activationID  string
 }
 
-func (d DockerDeployment) ID() string {
+func (d DockerDeployment) DeploymentID() string {
 	return fmt.Sprintf("%s_%s", d.containerName, d.ContainerID)
 }
 
 func ContainerName() string {
-	return StringWithCharset(8, charset)
+	return RandomStringWithCharset(8, charset)
 }
 
 func NewOpenWhiskDockerRunner(ctx context.Context) *OpenWhiskDockerRunner {
@@ -71,23 +114,18 @@ func NewOpenWhiskDockerRunner(ctx context.Context) *OpenWhiskDockerRunner {
 }
 
 func (o OpenWhiskDockerRunner) Deploy(deployable falco.Deployable) (falco.Deployment, error) {
-	var containerName string
-	if deployable.Name() == "" {
-		containerName = ContainerName()
-	} else {
-		containerName = deployable.Name()
-	}
+	containerName := ContainerName()
 
 	containerReq, err := o.cli.ContainerCreate(o.ctx,
 		&container.Config{
-			Image:        deployable.Runtime(),
+			Image:        deployable.Runtime().Identifier(),
 			ExposedPorts: nat.PortSet{"8080": struct{}{}},
 		},
 		&container.HostConfig{
 			PortBindings: map[nat.Port][]nat.PortBinding{
 				"8080": {{HostIP: "127.0.0.1", HostPort: "8080"}},
 			},
-		}, nil, containerName)
+		}, nil, nil, containerName)
 
 	if err != nil {
 		return nil, err
@@ -97,34 +135,21 @@ func (o OpenWhiskDockerRunner) Deploy(deployable falco.Deployable) (falco.Deploy
 	if err != nil {
 		return nil, err
 	}
-
-	//TODO: remove
-	fmt.Printf("started %s - sending init", containerReq.ID)
-
+	time.Sleep(30 * time.Second)
 	deployment := &DockerDeployment{
 		ContainerID:   containerReq.ID,
 		containerName: containerName,
 		nameSpace:     ContainerName(),
-		activationID:  StringWithCharset(15, charset),
+		activationID:  RandomStringWithCharset(15, charset),
 	}
 
-	err = o.Init(deployable, deployment)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return deployment, nil
-}
-
-func (o OpenWhiskDockerRunner) Init(deployable falco.Deployable, deployment *DockerDeployment) error {
 	envMap := map[string]string{
 		"__OW_API_KEY":       "",
 		"__OW_NAMESPACE":     deployment.nameSpace,
-		"__OW_ACTION_NAME":   deployment.containerName,
+		"__OW_ACTION_NAME":   containerName,
 		"__OW_ACTIVATION_ID": deployment.activationID,
 	}
-	deploymentContext := deployable.Context()
+	deploymentContext := deployable.Option()
 
 	for k, v := range deploymentContext.PrefixMap("env") {
 		envMap[k] = v
@@ -132,9 +157,9 @@ func (o OpenWhiskDockerRunner) Init(deployable falco.Deployable, deployment *Doc
 
 	msg := OpenWhiskMessage{
 		Value: InitMessage{
-			Name:   deployment.ID(),
+			Name:   deployment.DeploymentID(),
 			Main:   "none",
-			Code:   deployable.Payload(),
+			Code:   deployable.Payload().(string),
 			Binary: false,
 			Env:    envMap,
 		},
@@ -142,31 +167,35 @@ func (o OpenWhiskDockerRunner) Init(deployable falco.Deployable, deployment *Doc
 
 	requestBody, err := json.Marshal(msg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	initResp, err := http.Post("http://127.0.0.1:8080/init", "application/json",
 		bytes.NewReader(requestBody))
 
 	if err != nil {
-		return err
+		return nil, err
 	}
+	//TODO: remove
+	fmt.Printf("%s send init, got:%d", containerReq.ID, initResp.StatusCode)
 
-	fmt.Printf("send init %d with %s", initResp.StatusCode, unwrap(ioutil.ReadAll(initResp.Body)))
-
-	return nil
+	return deployment, nil
 }
 
-func unwrap(in []byte, err error) string {
-	if err != nil {
-		return ""
-	} else {
-		return string(in)
+func (o OpenWhiskDockerRunner) FetchDeployment(deplotmentID string) (falco.Deployment, error) {
+	split := strings.Split(deplotmentID, "_")
+
+	deployment := &DockerDeployment{
+		ContainerID:   split[1],
+		containerName: split[0],
+		nameSpace:     ContainerName(),
+		activationID:  RandomStringWithCharset(15, charset),
 	}
+	return deployment, nil
 }
 
 func (o OpenWhiskDockerRunner) Remove(deployment falco.Deployment) error {
-	dockerDeployment := deployment.(DockerDeployment)
+	dockerDeployment := deployment.(*DockerDeployment)
 	var cid = dockerDeployment.ContainerID
 
 	c, err := o.cli.ContainerInspect(o.ctx, cid)
@@ -190,12 +219,12 @@ func (o OpenWhiskDockerRunner) Scale(deployment falco.Deployment, options ...fal
 	return deployment, nil
 }
 
-func (o OpenWhiskDockerRunner) Invoke(deployment falco.Deployment, payload falco.InvocationPayload, collector falco.ResultCollector) error {
-	dockerDeployment := deployment.(DockerDeployment)
+func (o OpenWhiskDockerRunner) Invoke(deployment falco.Deployment, payload falco.Invocation) (falco.Invocation, error) {
+	dockerDeployment := deployment.(*DockerDeployment)
 	msg := RunMessage{
 		Input:         payload,
 		Namespace:     dockerDeployment.nameSpace,
-		Name:          dockerDeployment.ID(),
+		Name:          dockerDeployment.DeploymentID(),
 		Key:           "DUMMY-KEY",
 		ActivationID:  dockerDeployment.activationID,
 		TransactionID: dockerDeployment.activationID,
@@ -203,37 +232,42 @@ func (o OpenWhiskDockerRunner) Invoke(deployment falco.Deployment, payload falco
 
 	requestBody, err := json.Marshal(msg)
 	if err != nil {
-		return err
+		payload.SetError(err)
+		return payload, err
 	}
 
 	start := time.Now()
 	resp, err := http.Post("http://127.0.0.1:8080/run", "application/json", bytes.NewReader(requestBody))
 	elapsed := time.Since(start)
+	payload.Done(&elapsed)
 
 	if err != nil {
-		return err
+		payload.SetError(err)
+		return payload, err
 	}
 
-	data, err := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode == 200 {
+		data, err := ioutil.ReadAll(resp.Body)
 
-	if err != nil {
-		return err
-	}
+		if err != nil {
+			payload.SetError(err)
+			return payload, err
+		}
 
-	if resp.StatusCode == 200 && collector != nil {
-		measurements := make(falco.Measurement)
+		measurements := make(map[string]interface{})
 		err = json.Unmarshal(data, &measurements)
 
 		if err != nil {
-			return nil
+			payload.SetError(err)
+			return payload, err
 		}
-
-		payload.Runtime().MakeMeasurement(measurements)
-
-		measurements.SetJobID(deployment.ID())
-
-		writeMeasurement(measurements, payload.ID(), elapsed, collector)
+		payload.SetRuntimeReference(dockerDeployment.ContainerID)
+		payload.SetResult(measurements)
+		return payload, nil
+	} else {
+		err = fmt.Errorf("invocation error [%d] %s - check the platfrom logs", resp.StatusCode, resp.Status)
+		payload.SetError(err)
+		return payload, err
 	}
 
-	return nil
 }

@@ -24,7 +24,6 @@
 package platforms
 
 import (
-	"github.com/ISE-SMILE/falco"
 	"math/rand"
 	"time"
 )
@@ -34,17 +33,10 @@ const charset = "abcdefghijklmnopqrstuvwxyz"
 var seededRand *rand.Rand = rand.New(
 	rand.NewSource(time.Now().UnixNano()))
 
-func StringWithCharset(length int, charset string) string {
+func RandomStringWithCharset(length int, charset string) string {
 	b := make([]byte, length)
 	for i := range b {
 		b[i] = charset[seededRand.Intn(len(charset))]
 	}
 	return string(b)
-}
-
-func writeMeasurement(data falco.Measurement, payloadId string, duration time.Duration, writer falco.ResultCollector) {
-	data.WithDefaults()
-	data.SetRequestLatency(duration)
-	data.SetInvocationID(payloadId)
-	writer.Add(data)
 }

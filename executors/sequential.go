@@ -30,15 +30,16 @@ import (
 type SequentialExecutor struct {
 }
 
-func (p SequentialExecutor) Execute(job *falco.Job,
-	submittable falco.Submittable,
-	collector falco.ResultCollector) error {
+func (p SequentialExecutor) Execute(job *falco.AsyncInvocationPhase, target falco.Deployment, submittable falco.AsyncPlatform) error {
 
-	for _, payload := range job.Tasks {
-		err := submittable.Invoke(job.Deployment, payload, collector)
+	results := make([]falco.Invocation, 0)
+	for _, payload := range job.Payloads {
+		inv, err := submittable.Invoke(target, payload)
 		if err != nil {
 			return err
 		}
+		results = append(results, inv)
 	}
+	job.Payloads = results
 	return nil
 }

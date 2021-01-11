@@ -28,84 +28,75 @@ import (
 	"time"
 )
 
-type InvocationStatus int
-
-const (
-	Success InvocationStatus = iota
-	Failure
-	RuntimeError
-	PlatformError
-	MemoryError
-)
-
-type InvocationPayload interface {
-	//uniuqe task IID (can be used to assosiate returned invocations to submitted invocations)
-	ID() string
+type Invocation interface {
+	//unique task IID (can be used to associate returned invocations to submitted invocations)
+	InvocationID() string
 	//the time this payload was send
 	SubmittedAt() time.Time
-	//the latancy between the sumitted time and the time Done was called
-	Latancy() time.Duration
-
-	Status() InvocationStatus
+	//the Duration between the submitted time and the time Done was called
+	InvocationDuration() time.Duration
 
 	//if this payload is processed, e.g. we know it failed, or we have a result
 	IsCompleted() bool
-	//any error that occured with this paylaod
+	//any error that occurred with this payload
 	Error() error
-	//sets stubmission time and counts the number or resubmissions
+	//sets submission time and counts the number or resubmissions
 	Submitted() int8
-	//retuns the number of sumissions to a platfrom
+	//returns the number of submissions to a platform
 	GetNumberOfSubmissions() int8
 	//sets an error
 	SetError(err error)
 
-	//the runitme used to generate this invocation
+	//the runtime used to generate this invocation
 	Runtime() Runtime
-	//Set completed to true and stores compleation time
-	Done()
+	//Set completed to true and stores completion time, calculates the duration using time.Now() if duration is nil
+	Done(duration *time.Duration)
 
-	//writer.Add(payload.Runtime().MakeFailure(payload.ID(),payload.Error().Error(),payload.SubmittedAt()))
-	WriteError(writer ResultCollector)
 	//is called if a task gets resubmitted (due to error or because it seamed to straggle)
 	MarkAsResubmitted()
+
+	SetResult(result interface{})
+
+	Result() interface{}
+	SetRuntimeReference(id interface{})
+	RuntimeReference() interface{}
 }
 
 type Deployable interface {
-	Name() string
-	Payload() string
-	Context() *Context
-	Runtime() string
+	Payload() interface{}
+	Option() *Options
+	Runtime() Runtime
 }
 
 type Deployment interface {
-	ID() string
+	DeploymentID() string
 }
 
 type ScaleOptions func(deployment Deployment)
 
-type Context struct {
+type Options struct {
 	name    string
 	options map[string]interface{}
 }
 
-func NewContext(name string) *Context {
-	return &Context{name: name, options: make(map[string]interface{})}
+func NewFacloOptions(name string) *Options {
+	return &Options{name: name, options: make(map[string]interface{})}
 }
 
-func (r *Context) Name() string {
+func (r *Options) Name() string {
 	return r.name
 }
 
-func (r *Context) add(name string, value interface{}) {
-	r.options[name] = value
+func (r *Options) add(key string, value interface{}) {
+	r.options[key] = value
 }
 
-func (r *Context) IsSet(name string) bool {
+func (r *Options) IsSet(name string) bool {
 	_, ok := r.options[name]
 	return ok
 }
 
-func (r *Context) String(name, defaultValue string) string {
+func (r *Options) String(name, defaultValue string) string {
 	if val, ok := r.options[name]; ok {
 		if value, ok := val.(string); ok {
 			return value
@@ -114,7 +105,7 @@ func (r *Context) String(name, defaultValue string) string {
 	return defaultValue
 }
 
-func (r *Context) Int(name string, defaultValue int) int {
+func (r *Options) Int(name string, defaultValue int) int {
 	if val, ok := r.options[name]; ok {
 		if value, ok := val.(int); ok {
 			return value
@@ -123,7 +114,7 @@ func (r *Context) Int(name string, defaultValue int) int {
 	return defaultValue
 }
 
-func (r *Context) Duration(name string, defaultValue time.Duration) time.Duration {
+func (r *Options) Duration(name string, defaultValue time.Duration) time.Duration {
 	if val, ok := r.options[name]; ok {
 		if value, ok := val.(time.Duration); ok {
 			return value
@@ -132,7 +123,7 @@ func (r *Context) Duration(name string, defaultValue time.Duration) time.Duratio
 	return defaultValue
 }
 
-func (r *Context) Slice(name string) []string {
+func (r *Options) Slice(name string) []string {
 	if val, ok := r.options[name]; ok {
 		if value, ok := val.([]string); ok {
 			return value
@@ -141,7 +132,7 @@ func (r *Context) Slice(name string) []string {
 	return []string{}
 }
 
-func (r *Context) Bool(name string) bool {
+func (r *Options) Bool(name string) bool {
 	if val, ok := r.options[name]; ok {
 		if value, ok := val.(bool); ok {
 			return value
@@ -150,7 +141,7 @@ func (r *Context) Bool(name string) bool {
 	return false
 }
 
-func (r *Context) ToMap() map[string]string {
+func (r *Options) ToMap() map[string]string {
 	opts := make(map[string]string)
 	for k, i := range r.options {
 		if val, ok := i.(string); ok {
@@ -160,45 +151,32 @@ func (r *Context) ToMap() map[string]string {
 	return opts
 }
 
-func (r *Context) PrefixMap(prefix string) map[string]string {
+func (r *Options) PrefixMap(prefix string) map[string]string {
 	opts := make(map[string]string)
 	for k, i := range r.options {
 		if strings.HasPrefix(k, prefix) {
 			if val, ok := i.(string); ok {
-				key := strings.TrimPrefix(k, prefix)
-				opts[key] = val
+				opts[k] = val
 			}
 		}
 	}
 	return opts
 }
 
-func (r *Context) NewStingOption(name, value string) {
+func (r *Options) NewStingOption(name, value string) {
 	r.add(name, value)
 }
-func (r *Context) NewIntOption(name string, value int) {
+func (r *Options) NewIntOption(name string, value int) {
 	r.add(name, value)
 }
-func (r *Context) NewDurationOption(name string, value time.Duration) {
+func (r *Options) NewDurationOption(name string, value time.Duration) {
 	r.add(name, value)
 }
-func (r *Context) NewSliceOption(name string, value []string) {
+func (r *Options) NewSliceOption(name string, value []string) {
 	r.add(name, value)
 }
-func (r *Context) NewBoolOption(name string, value bool) {
+func (r *Options) NewBoolOption(name string, value bool) {
 	r.add(name, value)
-}
-
-func (r *Context) AsMap() map[string]interface{} {
-	return r.options
-}
-
-func (r *Context) Insert(prefix string, values map[string]interface{}) {
-	if values != nil {
-		for k, v := range values {
-			r.options[prefix+k] = v
-		}
-	}
 }
 
 type InvocableOptions interface {

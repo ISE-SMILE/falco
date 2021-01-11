@@ -33,25 +33,14 @@ import (
 	"time"
 )
 
-type ProgressMonitor interface {
-	Setup()
-	Advance(int)
-	Expand(int)
-	Render()
-	Finish()
-	Info(string)
-}
-
-type Job struct {
+type AsyncInvocationPhase struct {
+	ID  string
 	ctx context.Context
 
-	Context Context
-	//
-	Deployment Deployment
 	//submissions
-	submitted map[string]InvocationPayload
-	completed map[string]InvocationPayload
-	Tasks     []InvocationPayload
+	submitted map[string]Invocation
+	completed map[string]Invocation
+	Payloads  []Invocation
 
 	//rate-limiting
 	query ratelimit.Limiter
@@ -65,19 +54,22 @@ type Job struct {
 	submissions atomic.Int64
 	//output
 	monitor ProgressMonitor
+
+	Deployment Deployment
 }
 
-func NewJob(ctx context.Context, tasks []InvocationPayload,
-	requestsPerSeconds int, monitor ProgressMonitor) *Job {
+func NewPhase(ctx context.Context, id string, tasks []Invocation,
+	requestsPerSeconds int, monitor ProgressMonitor) *AsyncInvocationPhase {
 	jobCtx, cancel := context.WithCancel(ctx)
-	job := &Job{
+	job := &AsyncInvocationPhase{
+		ID:        id,
 		ctx:       jobCtx,
 		spawn:     rate.NewLimiter(rate.Every(time.Minute/time.Duration(requestsPerSeconds)), 10),
 		query:     ratelimit.New(requestsPerSeconds),
 		monitor:   monitor,
-		Tasks:     tasks,
-		submitted: make(map[string]InvocationPayload),
-		completed: make(map[string]InvocationPayload),
+		Payloads:  tasks,
+		submitted: make(map[string]Invocation),
+		completed: make(map[string]Invocation),
 		cancel:    cancel,
 	}
 	if job.monitor != nil {
@@ -87,11 +79,11 @@ func NewJob(ctx context.Context, tasks []InvocationPayload,
 	return job
 }
 
-func (j *Job) Name() string {
-	return j.Context.Name()
+func (j *AsyncInvocationPhase) Name() string {
+	return j.ID
 }
 
-func (j *Job) Done(payloadID string) {
+func (j *AsyncInvocationPhase) Done(payloadID string) {
 
 	if j.submissions.Load() > 0 {
 		j.wg.Done()
@@ -101,7 +93,7 @@ func (j *Job) Done(payloadID string) {
 		j.monitor.Advance(1)
 	}
 
-	if payload, err := j.PayloadFromId(payloadID); err == nil {
+	if payload, err := j.SubmittedPayloadFromId(payloadID); err == nil {
 		if _, ok := j.completed[payloadID]; ok {
 			//we have an already done job, we ignore it.
 			fmt.Printf("recived a task that was already complet %s\n", payloadID)
@@ -118,9 +110,9 @@ func (j *Job) Done(payloadID string) {
 	j.submissions.Sub(1)
 }
 
-func (j *Job) Wait() {
+func (j *AsyncInvocationPhase) Wait() {
 	if j.monitor != nil {
-		j.monitor.Render()
+		go j.monitor.Render()
 	}
 
 	waitDelegate := make(chan struct{})
@@ -132,20 +124,17 @@ func (j *Job) Wait() {
 	case <-waitDelegate:
 	case <-j.ctx.Done():
 	}
-
-	if j.monitor != nil {
-		j.monitor.Finish()
-	}
+	j.Finish()
 
 }
 
-func (j *Job) Info(text string) {
+func (j *AsyncInvocationPhase) Log(text string) {
 	if j.monitor != nil {
 		j.monitor.Info(text)
 	}
 }
 
-func (j *Job) WithTimeout(timeout time.Duration) error {
+func (j *AsyncInvocationPhase) WithTimeout(timeout time.Duration) error {
 	waitDelegate := make(chan struct{})
 
 	go func() {
@@ -159,41 +148,40 @@ func (j *Job) WithTimeout(timeout time.Duration) error {
 	case <-waitDelegate:
 		return nil
 	case <-time.After(timeout):
-		if j.monitor != nil {
-			j.monitor.Finish()
-		}
-		j.Cancel()
+		j.Finish()
 		return fmt.Errorf("timed out after %+v", timeout)
 	}
 }
 
-func (j *Job) Canceled() <-chan struct{} {
+func (j *AsyncInvocationPhase) Canceled() <-chan struct{} {
 	return j.ctx.Done()
 }
 
-func (j *Job) TakeQuery() time.Time {
+//TakeQuery enabels rate limiting for api requests, e.g. for requesting the status of an invocation
+func (j *AsyncInvocationPhase) TakeQuery() time.Time {
 	return j.query.Take()
 }
 
-func (j *Job) TakeSpawn() time.Time {
+//TakeInvocation enables rate limiting for invocation requests
+func (j *AsyncInvocationPhase) TakeInvocation() time.Time {
 	_ = j.spawn.Wait(j.ctx)
 	return time.Now()
 }
 
-func (j *Job) Finish() {
+func (j *AsyncInvocationPhase) Finish() {
 	j.cancel()
+
+	//if j.monitor != nil {
+	//	j.monitor.Finish()
+	//}
 }
 
-func (j *Job) AsParentContext() context.Context {
+func (j *AsyncInvocationPhase) AsParentContext() context.Context {
 	return j.ctx
 }
 
-func (j *Job) Cancel() {
-	j.cancel()
-	j.Finish()
-}
-
-func (j *Job) SubmittedTask(payload InvocationPayload) {
+//SubmittedTask is called to indicate that a payload was send to an invocation
+func (j *AsyncInvocationPhase) SubmittedTask(payload Invocation) {
 	j.lock.Lock()
 	defer j.lock.Unlock()
 
@@ -203,13 +191,13 @@ func (j *Job) SubmittedTask(payload InvocationPayload) {
 
 	j.wg.Add(1)
 	j.submissions.Add(1)
-	if _, ok := j.submitted[payload.ID()]; ok {
+	if _, ok := j.submitted[payload.InvocationID()]; ok {
 		payload.MarkAsResubmitted()
 	}
-	j.submitted[payload.ID()] = payload
+	j.submitted[payload.InvocationID()] = payload
 }
 
-func (j *Job) PayloadFromId(payloadID string) (InvocationPayload, error) {
+func (j *AsyncInvocationPhase) SubmittedPayloadFromId(payloadID string) (Invocation, error) {
 	j.lock.Lock()
 	defer j.lock.Unlock()
 	if val, ok := j.submitted[payloadID]; ok {
@@ -219,7 +207,7 @@ func (j *Job) PayloadFromId(payloadID string) (InvocationPayload, error) {
 	}
 }
 
-func (j *Job) PrintStats() {
+func (j *AsyncInvocationPhase) PrintStats() {
 	totalTime := time.Duration(0)
 	failed := 0
 	min := time.Now()
@@ -228,7 +216,7 @@ func (j *Job) PrintStats() {
 			if t.SubmittedAt().Before(min) {
 				min = t.SubmittedAt()
 			}
-			totalTime += t.Latancy()
+			totalTime += t.InvocationDuration()
 		} else {
 			failed++
 		}

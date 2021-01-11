@@ -24,5 +24,5 @@
 package falco
 
 type ExecutionStrategy interface {
-	Execute(*Job, Submittable, ResultCollector) error
+	Execute(*AsyncInvocationPhase, Deployment, AsyncPlatform) error
 }
