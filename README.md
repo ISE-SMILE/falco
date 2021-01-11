@@ -12,11 +12,11 @@ allowing you to manage execution and coordination of your functions without worr
 deployment needs. 
 
 ### Build With
- * (go 1.14)[https://golang.org/dl/]
+ * [go 1.14](https://golang.org/dl/)
 ### Usage
-Falco is a libary, thus to use it you need to first implement some of the falco interfaces to use it properply.
+Falco is a library, thus to use it you need to first implement some falco interfaces to use it properply.
 Check out the Getting Staarted section of the readme for a hands on example. In general Falco uses a Driver abstraction to manage FaaS Analytics Pipelines.
-A driver can Deply, Execute and Remove workloads from `falco.Platform``. Falco comes with multiple pre-Build platforms, see `platforms/`.
+A driver can Deploy, Execute and Remove workloads from `falco.Platform`. Falco comes with multiple pre-Build platforms, see `platforms/`.
 
 Each `falco.Driver` need a Runtime, the runtime is the application that runs on the FaaS Platform, since a driver and a runtime are closely coupled it makes sense to developme them together.
 
@@ -163,5 +163,5 @@ Run with `go run example/example.go -host=<OpenWhik Host Address> -token=<OpenWh
 Distributed under the MIT License. See LICENSE for more information.
 
 ## Acknowledgements
-Created in the context of SMILE. SMILE is a Software Campus Project funded by BMBF. More Information at: (https://ise-smile.github.io/)[https://ise-smile.github.io/].
+Created in the context of SMILE. SMILE is a Software Campus Project funded by BMBF. More Information at: [https://ise-smile.github.io/](https://ise-smile.github.io/).
  
