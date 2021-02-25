@@ -32,18 +32,11 @@ type ProgressMonitor interface {
 	Info(string)
 }
 
-/**
-Interface to drive complex serverless applications that execute multiple invocations or ExecutionPlan.
-*/
+//Driver interface to drive complex serverless applications that execute multiple invocations or ExecutionPlan.
 type Driver interface {
 
 	//Runtime() the runtime used by this driver
 	Runtime() Runtime
-
-	//TODO: Remove
-	//DEPRECATED
-	//Strategies() a set of availible strategies by this driver
-	Strategies() []ExecutionStrategy
 
 	//ExecutionPlan() set of phases this driver needs to execute
 	ExecutionPlan() *ExecutionPlan

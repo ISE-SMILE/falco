@@ -39,6 +39,7 @@ import (
 	"time"
 )
 
+//OpenWhiskDockerRunner implement a AsyncPlatfrom using the OpenWhisk docker runtime. This will create a single docker container for your runtime and use the OpenWhisk runtime api to perfrom deployment and invocations.
 type OpenWhiskDockerRunner struct {
 	cli *client.Client
 	ctx context.Context
@@ -78,7 +79,7 @@ func (o OpenWhiskDockerRunner) Collect(job *falco.AsyncInvocationPhase,
 			if ok {
 				fmt.Printf("%+v\n", activation)
 			}
-		case <-job.Canceled():
+		case <-job.IsCanceled():
 			fmt.Printf("collection canceld with %d activations left\n", len(activations))
 		}
 	}

@@ -28,6 +28,8 @@ import (
 	"github.com/ISE-SMILE/falco"
 )
 
+//ParallelExecutor will invoke the Phase with a fixed number of Threads in parallel.
+//The executor is greedy each threads will perform invocations as fast as possible.
 type ParallelExecutor struct {
 	Threads int
 }
@@ -37,6 +39,7 @@ func (o ParallelExecutor) Execute(job *falco.AsyncInvocationPhase, target falco.
 
 	results := make(chan error)
 
+	//iterates over the queue (chan of invocations, blocking!) and Invokes each (blocking)
 	worker := func(queue chan falco.Invocation, returns chan error) {
 		var counter = 0
 		for payload := range queue {

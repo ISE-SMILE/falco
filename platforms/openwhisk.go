@@ -33,6 +33,7 @@ import (
 	time "time"
 )
 
+//OpenWhisk implements an AsyncPlatform for OpenWhisk v1.1
 type OpenWhisk struct {
 	cli *whisk.Client
 
@@ -303,7 +304,10 @@ func (ow *OpenWhisk) Submit(job *falco.AsyncInvocationPhase, target falco.Deploy
 		return fmt.Errorf("job is not a AsyncInvocationPhase not compatible with OpenWhisk")
 	}
 
-	job.TakeInvocation()
+	t := job.TakeInvocation()
+	if t == nil {
+		return fmt.Errorf("failed to take token for action %s cause", whiskDeployment.ActionName)
+	}
 
 	qualifiedName := ow.qualifiedName(whiskDeployment)
 	if qualifiedName == nil {
@@ -360,7 +364,7 @@ func (ow *OpenWhisk) Collect(job *falco.AsyncInvocationPhase, activations <-chan
 				time.Sleep(200 * time.Millisecond)
 			}
 
-		case <-job.Canceled():
+		case <-job.IsCanceled():
 			fmt.Printf("collection canceld with %d activations left\n", len(activations))
 		}
 	}
@@ -417,15 +421,15 @@ func (ow *OpenWhisk) fetchAsyncResult(job *falco.AsyncInvocationPhase, pool chan
 		//
 		if tries > ow.maxRetry {
 			fmt.Printf("could not fetch %s after %d tries\n", activationID, ow.maxRetry)
-			activation.SetError(fmt.Errorf("function invocation timeout, last submit at %d", activation.SubmittedAt()))
+			activation.SetError(fmt.Errorf("function invocation timeout, last submit at %s", activation.SubmittedAt()))
 			return
 		}
 		//here comes the hack, we either wait using time.After for a fixed period or get canceled during it
 		//side effect a request might still be finish should the ctx be canceled if it is currently performing a poll
 		select {
-		case <-job.Canceled():
+		case <-job.IsCanceled():
 			fmt.Printf("failed to collect %s\n", activationID)
-			activation.SetError(fmt.Errorf("canceld to wait on activation", activation.SubmittedAt()))
+			activation.SetError(fmt.Errorf("canceld to wait on activation %s", activation.SubmittedAt()))
 			return
 		case <-time.After(ow.BACKOFF):
 			// if we reach this point than try again...

@@ -23,6 +23,7 @@
 
 package falco
 
+//Platform is the main interface to implement FaaS APIs for different Providers.
 type Platform interface {
 	//deploys a function
 	Deploy(deployable Deployable) (Deployment, error)

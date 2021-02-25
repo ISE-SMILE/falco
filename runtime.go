@@ -23,9 +23,10 @@
 
 package falco
 
+//Main interface for a processing application. Each Falco Application must implement at least one Runtime.
 type Runtime interface {
 	Identifier() string
-	//compile a set of given files to a deployment package that can be deployed to any platfrom
+	//compile a set of given files to a deployment package that can be deployed to any platform
 	MakeDeployment(*Options, ...string) (Deployable, error)
 
 	//combine a set of input files to an invocation payload for a given runtime, an example would be a node-js file and all its dependeis into a zip for a nodeJS runtime.

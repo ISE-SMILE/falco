@@ -23,9 +23,7 @@
 
 package falco
 
-/*
- Interface for Async Submission of Workloads
-*/
+//AsyncPlatform to implement a FaaS platform API that allows for async submissions of events
 type AsyncPlatform interface {
 	Platform
 

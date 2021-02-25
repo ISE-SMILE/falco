@@ -27,6 +27,7 @@ import (
 	"github.com/ISE-SMILE/falco"
 )
 
+//SequentialExecutor will invoke all Invocations of a Phase in sequence.
 type SequentialExecutor struct {
 }
 

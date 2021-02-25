@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2020 Sebastian Werner
+ * Copyright (c) 2021 Sebastian Werner
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -55,15 +55,39 @@ type MockRuntime struct {
 }
 
 func (m *MockRuntime) Identifier() string {
-	panic("implement me")
+	return "test_runtime"
 }
 
 func (m *MockRuntime) MakeDeployment(c *Options, s ...string) (Deployable, error) {
-	panic("implement me")
+	panic("I can't be deployed!")
 }
 
 func (m *MockRuntime) InvocationPayload(c *Options, s ...string) ([]Invocation, error) {
-	panic("implement me")
+	invocations := make([]Invocation, 0)
+	for _, str := range s {
+		invocations = append(invocations, NewMockInvocation(str, nil))
+	}
+	return invocations, nil
+}
+
+func NewMockInvocation(s string, args map[string]interface{}) Invocation {
+	if args == nil {
+		args = make(map[string]interface{})
+	}
+	return &MockInvocation{
+		IID:             s,
+		SUB:             time.Time{},
+		COM:             time.Time{},
+		DONE:            false,
+		ERR:             nil,
+		Tries:           0,
+		Delay:           0,
+		duration:        0,
+		SuccessSelector: nil,
+		result:          "",
+		runtimeID:       "",
+		Args:            args,
+	}
 }
 
 type MockInvocation struct {
@@ -79,10 +103,16 @@ type MockInvocation struct {
 
 	result    string
 	runtimeID string
+
+	Args map[string]interface{} //can be Used for test instrumentation
+}
+
+func (m *MockInvocation) InvocationID() string {
+	return m.IID
 }
 
 func (m *MockInvocation) InvocationDuration() time.Duration {
-	panic("implement me")
+	return m.duration
 }
 
 func (m *MockInvocation) Done(duration *time.Duration) {
@@ -94,7 +124,6 @@ func (m *MockInvocation) Done(duration *time.Duration) {
 	}
 
 	m.DONE = true
-	panic("implement me")
 }
 
 func (m *MockInvocation) SetResult(result interface{}) {

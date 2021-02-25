@@ -31,6 +31,9 @@ import (
 	"time"
 )
 
+//AsyncExecutor can be used together with an Async platfrom to perfrom all invocations of a phase.
+//It implementes a poll based mechanism to collect all submitted results and will stop after a predefined Timeout.
+//**Warning**: Ensure that you implement a upper limited of query request for this strategy as it will query the platform often to check for finished results
 type AsyncExecutor struct {
 	Timeout time.Duration
 }
@@ -40,6 +43,7 @@ func (p AsyncExecutor) Execute(job *falco.AsyncInvocationPhase, target falco.Dep
 	activations := make(chan falco.Invocation, len(job.Payloads))
 	start := time.Now()
 
+	//Start the asnyc poll for results
 	go func() {
 		time.Sleep(1000 * time.Millisecond)
 		err := submittable.Collect(job, activations) //(job, activations, writer)
@@ -50,12 +54,13 @@ func (p AsyncExecutor) Execute(job *falco.AsyncInvocationPhase, target falco.Dep
 
 	job.Log(fmt.Sprintf("submitting %d jobs\n", len(job.Payloads)))
 
+	//submit all invocations
 	submitJobAsync(submittable, target, job.Payloads, job, activations)
 
 	job.Log(fmt.Sprintf("submitted %d jobs", len(job.Payloads)))
 
 	close(activations)
-
+	//wait for the activation to complete
 	if p.Timeout > 0 {
 		if job.WithTimeout(p.Timeout) != nil {
 			job.Finish()
@@ -72,13 +77,15 @@ func (p AsyncExecutor) Execute(job *falco.AsyncInvocationPhase, target falco.Dep
 
 }
 
-//submit jobs async and waits until all are submitted; adds invoc results to a chan
+//submitJobAsync submit jobs async and waits until all are submitted; adds invoc results to a chan
+//blocks until all payloads have been accepted by the platform
 func submitJobAsync(submittable falco.AsyncPlatform, target falco.Deployment, payloads []falco.Invocation, job *falco.AsyncInvocationPhase, activations chan falco.Invocation) {
 	threads := runtime.NumCPU()
 	chunkSize := (len(payloads) + threads - 1) / threads
 
 	var sendGroup sync.WaitGroup
 
+	//devide the payload across a number of threads
 	for i := 0; i < len(payloads); i += chunkSize {
 		end := i + chunkSize
 

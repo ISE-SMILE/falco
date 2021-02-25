@@ -27,45 +27,41 @@ import (
 	"context"
 	"fmt"
 	"go.uber.org/atomic"
-	"go.uber.org/ratelimit"
-	"golang.org/x/time/rate"
 	"sync"
 	"time"
 )
 
 type AsyncInvocationPhase struct {
-	ID  string
+	ID         string
+	Payloads   []Invocation
+	Deployment Deployment
+
 	ctx context.Context
 
-	//submissions
+	//invocations
 	submitted map[string]Invocation
 	completed map[string]Invocation
-	Payloads  []Invocation
 
-	//rate-limiting
-	query ratelimit.Limiter
-	spawn *rate.Limiter
 	//sync
 	wg     sync.WaitGroup
 	lock   sync.Mutex
 	cancel context.CancelFunc
 
 	//internals
-	submissions atomic.Int64
+	invocations atomic.Int64
 	//output
 	monitor ProgressMonitor
 
-	Deployment Deployment
+	control CongestionController
 }
 
-func NewPhase(ctx context.Context, id string, tasks []Invocation,
-	requestsPerSeconds int, monitor ProgressMonitor) *AsyncInvocationPhase {
+func NewPhase(ctx context.Context, id string,
+	tasks []Invocation, control CongestionController, monitor ProgressMonitor) *AsyncInvocationPhase {
 	jobCtx, cancel := context.WithCancel(ctx)
 	job := &AsyncInvocationPhase{
 		ID:        id,
 		ctx:       jobCtx,
-		spawn:     rate.NewLimiter(rate.Every(time.Minute/time.Duration(requestsPerSeconds)), 10),
-		query:     ratelimit.New(requestsPerSeconds),
+		control:   control,
 		monitor:   monitor,
 		Payloads:  tasks,
 		submitted: make(map[string]Invocation),
@@ -76,6 +72,8 @@ func NewPhase(ctx context.Context, id string, tasks []Invocation,
 		job.monitor.Setup()
 	}
 
+	control.Setup(jobCtx)
+
 	return job
 }
 
@@ -85,7 +83,7 @@ func (j *AsyncInvocationPhase) Name() string {
 
 func (j *AsyncInvocationPhase) Done(payloadID string) {
 
-	if j.submissions.Load() > 0 {
+	if j.invocations.Load() > 0 {
 		j.wg.Done()
 	}
 
@@ -97,17 +95,21 @@ func (j *AsyncInvocationPhase) Done(payloadID string) {
 		if _, ok := j.completed[payloadID]; ok {
 			//we have an already done job, we ignore it.
 			fmt.Printf("recived a task that was already complet %s\n", payloadID)
+			j.control.Signal(nil)
 		} else {
 			j.lock.Lock()
 			//we only want to collect the first occorance of a payload
 			j.completed[payloadID] = payload
+			subimtted := payload.SubmittedAt()
+			j.control.Signal(&subimtted)
 			j.lock.Unlock()
 		}
 	} else {
 		fmt.Printf("completed a tasks we did  not submit jet %s\n", payloadID)
+		j.control.Signal(nil)
 	}
 
-	j.submissions.Sub(1)
+	j.invocations.Sub(1)
 }
 
 func (j *AsyncInvocationPhase) Wait() {
@@ -153,27 +155,31 @@ func (j *AsyncInvocationPhase) WithTimeout(timeout time.Duration) error {
 	}
 }
 
-func (j *AsyncInvocationPhase) Canceled() <-chan struct{} {
+func (j *AsyncInvocationPhase) IsCanceled() <-chan struct{} {
 	return j.ctx.Done()
 }
 
 //TakeQuery enabels rate limiting for api requests, e.g. for requesting the status of an invocation
-func (j *AsyncInvocationPhase) TakeQuery() time.Time {
-	return j.query.Take()
+func (j *AsyncInvocationPhase) TakeQuery() *time.Time {
+	take, err := j.control.Query(j.ctx)
+
+	if err != nil {
+		return nil
+	}
+	return take
 }
 
 //TakeInvocation enables rate limiting for invocation requests
-func (j *AsyncInvocationPhase) TakeInvocation() time.Time {
-	_ = j.spawn.Wait(j.ctx)
-	return time.Now()
+func (j *AsyncInvocationPhase) TakeInvocation() *time.Time {
+	take, err := j.control.Take(j.ctx)
+	if err != nil {
+		return nil
+	}
+	return take
 }
 
 func (j *AsyncInvocationPhase) Finish() {
 	j.cancel()
-
-	//if j.monitor != nil {
-	//	j.monitor.Finish()
-	//}
 }
 
 func (j *AsyncInvocationPhase) AsParentContext() context.Context {
@@ -190,7 +196,7 @@ func (j *AsyncInvocationPhase) SubmittedTask(payload Invocation) {
 	}
 
 	j.wg.Add(1)
-	j.submissions.Add(1)
+	j.invocations.Add(1)
 	if _, ok := j.submitted[payload.InvocationID()]; ok {
 		payload.MarkAsResubmitted()
 	}

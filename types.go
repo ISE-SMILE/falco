@@ -28,46 +28,55 @@ import (
 	"time"
 )
 
+//Invocation represents a single call to a FaaS function, capturing the state of this invocation.
 type Invocation interface {
-	//unique task IID (can be used to associate returned invocations to submitted invocations)
+	//InvocationID unique task IID (can be used to associate returned invocations to submitted invocations)
 	InvocationID() string
-	//the time this payload was send
+	//SubmittedAt the time this payload was send
 	SubmittedAt() time.Time
-	//the Duration between the submitted time and the time Done was called
+	//InvocationDuration the Duration between the submitted time and the time Done was called
 	InvocationDuration() time.Duration
 
-	//if this payload is processed, e.g. we know it failed, or we have a result
+	//IsCompleted if this payload is processed, e.g. we know it failed, or we have a result
 	IsCompleted() bool
-	//any error that occurred with this payload
+	//Error any error that occurred with this payload
 	Error() error
-	//sets submission time and counts the number or resubmissions
+	//Submitted sets submission time and counts the number or resubmissions
 	Submitted() int8
-	//returns the number of submissions to a platform
+	//GetNumberOfSubmissions returns the number of invocations to a platform
 	GetNumberOfSubmissions() int8
-	//sets an error
+	//SetError sets an error
 	SetError(err error)
 
-	//the runtime used to generate this invocation
+	//Runtime the runtime used to generate this invocation
 	Runtime() Runtime
-	//Set completed to true and stores completion time, calculates the duration using time.Now() if duration is nil
+	//Done Set completed to true and stores completion time, calculates the duration using time.Now() if duration is nil
 	Done(duration *time.Duration)
 
-	//is called if a task gets resubmitted (due to error or because it seamed to straggle)
+	//MarkAsResubmitted is called if a task gets resubmitted (due to error or because it seamed to straggle)
 	MarkAsResubmitted()
 
+	//SetResult can be used to set a result for each activation
 	SetResult(result interface{})
 
+	//Result returns data set with SetResult
 	Result() interface{}
+
+	//SetRuntimeReference for registering runtime identifier, like, activation-id
 	SetRuntimeReference(id interface{})
+
+	//RuntimeReference set with SetRuntimeReference
 	RuntimeReference() interface{}
 }
 
+//Deployable is the interfaced used for Platform and AsyncPlatform to deploy a Function
 type Deployable interface {
 	Payload() interface{}
 	Option() *Options
 	Runtime() Runtime
 }
 
+//Each Platform or AsyncPlatform will return a reference to a deploy function using this interface.
 type Deployment interface {
 	DeploymentID() string
 }
