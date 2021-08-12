@@ -138,7 +138,7 @@ func (p *PIDLimiter) computePID(inp float64, inflight float64) float64 {
 	//while we want to change the signal in portion to open requests above the threshold
 	//we do not want to increase the signal if we have less open request than allowed
 	if inflightError < 0 {
-		signal += p.F * inflightError
+		signal -= p.F * inflightError
 	}
 
 	p.lastCError = cError      //remember current error

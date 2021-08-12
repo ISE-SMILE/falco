@@ -27,7 +27,6 @@ package falco
 
 import (
 	"context"
-	log "github.com/sirupsen/logrus"
 	"go.uber.org/atomic"
 	"time"
 )
@@ -71,7 +70,7 @@ func NewAMIDLimiter(thr uint64, A, B float64, maxRPS int, clock LimiterClock) *A
 }
 func (a *AIMDLimiter) Setup(ctx context.Context) {
 	a.rateBucketLimiter.Setup(ctx)
-	log.Debugf("t,tr,inflight,mLat\n")
+	//log.Debugf("t,tr,inflight,mLat\n")
 }
 
 func (a *AIMDLimiter) update(t time.Time) float64 {
@@ -83,9 +82,9 @@ func (a *AIMDLimiter) update(t time.Time) float64 {
 
 	a.ccw.Store(ccw)
 
-	duration := a.Clock.Now().Sub(a.startTime).Seconds()
-	inflight := int64(a.closedCount.Load()) - int64(a.openCount.Load())
-	log.Debugf("%.0f,%02.2f,%d,%5s\n", duration, ccw, inflight, a.meanRSP.Load())
+	//duration := a.Clock.Now().Sub(a.startTime).Seconds()
+	//inflight := int64(a.closedCount.Load()) - int64(a.openCount.Load())
+	//log.Debugf("%.0f,%02.2f,%d,%5s\n", duration, ccw, inflight, a.meanRSP.Load())
 	return ccw
 }
 

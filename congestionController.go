@@ -43,6 +43,10 @@ type TimerClock struct {
 	ticker *time.Ticker
 }
 
+func DefaultClock() LimiterClock {
+	return NewTimedClock(time.Second)
+}
+
 func NewTimedClock(d time.Duration) LimiterClock {
 	return &TimerClock{
 		ticker: time.NewTicker(d),
